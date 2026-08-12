@@ -1,0 +1,863 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Panou Iframe</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<style>
+
+  :root{
+    --bg:#0e1013;
+    --grid:#181b20;
+    --panel:#1a1d24;
+    --panel-2:#20242c;
+    --border:#2b2f3a;
+    --text:#e7e9ee;
+    --muted:#868c99;
+    --edit:#f5a623;
+    --edit-dim:#7a5a1f;
+    --view:#2dd4bf;
+    --danger:#ef4b5f;
+    --radius:10px;
+  }
+  *{box-sizing:border-box;}
+  html,body{
+    margin:0; padding:0; height:100%; width:100%;
+    background:var(--bg);
+    color:var(--text);
+    font-family:'Inter',system-ui,sans-serif;
+    overflow:hidden;
+    -webkit-tap-highlight-color:transparent;
+  }
+  .topbar{
+    position:fixed; top:0; left:0; right:0; height:56px;
+    display:flex; align-items:center; gap:8px;
+    padding:0 10px;
+    background:var(--panel);
+    border-bottom:1px solid var(--border);
+    z-index:10000;
+    font-family:'JetBrains Mono',monospace;
+  }
+  .brand{
+    font-weight:700; font-size:13px; letter-spacing:.5px;
+    color:var(--muted);
+    padding-right:8px;
+    white-space:nowrap;
+    display:none;
+  }
+  @media(min-width:640px){ .brand{display:block;} }
+  .btn{
+    appearance:none; border:1px solid var(--border); background:var(--panel-2);
+    color:var(--text); font-family:'JetBrains Mono',monospace; font-size:12px;
+    padding:9px 12px; border-radius:8px; cursor:pointer;
+    display:flex; align-items:center; gap:6px;
+    white-space:nowrap;
+  }
+  .btn:active{ transform:scale(.97); }
+  .btn.primary{ background:var(--edit); color:#1a1400; border-color:var(--edit); font-weight:700;}
+  .btn.danger{ color:var(--danger); border-color:#4a2530; }
+  .mode-toggle{
+    margin-left:auto;
+    display:flex; align-items:center; gap:0;
+    border:1px solid var(--border); border-radius:8px; overflow:hidden;
+  }
+  .mode-toggle button{
+    appearance:none; border:none; background:var(--panel-2); color:var(--muted);
+    font-family:'JetBrains Mono',monospace; font-size:12px; font-weight:700;
+    padding:9px 12px; cursor:pointer;
+  }
+  .mode-toggle button.active.edit{ background:var(--edit); color:#1a1400; }
+  .mode-toggle button.active.view{ background:var(--view); color:#022; }
+
+  .canvas-wrap{
+    position:absolute; top:56px; left:0; right:0; bottom:0;
+    overflow:auto;
+    background-image:
+      linear-gradient(var(--grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size:32px 32px;
+    background-color:var(--bg);
+  }
+  .canvas{
+    position:relative;
+    width:2600px; height:2600px;
+  }
+  body.mode-view .canvas-wrap{ touch-action:pan-x pan-y; }
+  body.mode-edit .canvas-wrap{ touch-action:pan-x pan-y; }
+
+  .frame{
+    position:absolute;
+    background:#0b0c0f;
+    border-radius:6px;
+    overflow:visible;
+    border:1px solid var(--border);
+  }
+  body.mode-edit .frame{
+    border:2px dashed var(--edit-dim);
+  }
+  body.mode-edit .frame.dragging{
+    border-color:var(--edit);
+  }
+
+  .frame-body{
+    position:absolute; inset:0;
+    border-radius:5px; overflow:hidden;
+    background:#fff;
+  }
+  .frame-body iframe{
+    width:100%; height:100%; border:0; display:block; background:#fff;
+  }
+  body.mode-edit .frame-body iframe{ pointer-events:none; }
+
+  .frame-toolbar{
+    position:absolute; top:-38px; left:0; right:0;
+    height:32px; display:none;
+    align-items:center; gap:6px;
+    font-family:'JetBrains Mono',monospace; font-size:11px;
+    pointer-events:auto;
+  }
+  body.mode-edit .frame-toolbar{ display:flex; }
+  .frame-title{
+    color:var(--edit); font-weight:700; margin-right:auto;
+    background:var(--panel); border:1px solid var(--border);
+    padding:4px 8px; border-radius:6px;
+  }
+  .frame-toolbar button{
+    appearance:none; border:1px solid var(--border); background:var(--panel-2);
+    color:var(--text); border-radius:6px; padding:5px 8px; cursor:pointer;
+    font-family:'JetBrains Mono',monospace; font-size:11px;
+  }
+  .frame-toolbar button.del{ color:var(--danger); }
+
+  .move-handle{
+    position:absolute; top:-38px; left:50%; transform:translateX(-50%);
+    width:0; height:0;
+    display:none;
+  }
+  body.mode-edit .frame{ padding-top:0; }
+  .move-grip{
+    display:none;
+    position:absolute; left:50%; top:-16px; transform:translateX(-50%);
+    width:34px; height:34px; border-radius:50%;
+    background:var(--edit); color:#1a1400;
+    align-items:center; justify-content:center;
+    font-size:16px; font-weight:700;
+    cursor:grab;
+    border:2px solid #0e1013;
+    z-index:5;
+    touch-action:none;
+    box-shadow:0 2px 6px rgba(0,0,0,.4);
+  }
+  body.mode-edit .move-grip{ display:flex; }
+  .move-grip:active{ cursor:grabbing; }
+
+  .edge{ position:absolute; z-index:3; display:none; touch-action:none; }
+  body.mode-edit .edge{ display:block; }
+  .edge-n{ top:-6px; left:10px; right:10px; height:12px; cursor:ns-resize; }
+  .edge-s{ bottom:-6px; left:10px; right:10px; height:12px; cursor:ns-resize; }
+  .edge-w{ left:-6px; top:10px; bottom:10px; width:12px; cursor:ew-resize; }
+  .edge-e{ right:-6px; top:10px; bottom:10px; width:12px; cursor:ew-resize; }
+
+  .corner{ position:absolute; width:18px; height:18px; z-index:4; display:none; touch-action:none; }
+  body.mode-edit .corner{ display:block; }
+  .corner::after{
+    content:''; position:absolute; inset:4px; background:var(--edit);
+    border-radius:3px; border:2px solid #0e1013;
+  }
+  .corner-nw{ top:-8px; left:-8px; cursor:nwse-resize; }
+  .corner-ne{ top:-8px; right:-8px; cursor:nesw-resize; }
+  .corner-sw{ bottom:-8px; left:-8px; cursor:nesw-resize; }
+  .corner-se{ bottom:-8px; right:-8px; cursor:nwse-resize; }
+
+  .empty-hint{
+    position:absolute; top:110px; left:50%; transform:translateX(-50%);
+    color:var(--muted); font-family:'JetBrains Mono',monospace; font-size:13px;
+    text-align:center; white-space:nowrap;
+  }
+
+  .modal-overlay{
+    position:fixed; inset:0; background:rgba(5,6,8,.75);
+    display:none; align-items:flex-end; justify-content:center;
+    z-index:20000;
+  }
+  .modal-overlay.open{ display:flex; }
+  .modal{
+    width:100%; max-width:760px; height:78vh;
+    background:var(--panel); border:1px solid var(--border);
+    border-radius:14px 14px 0 0;
+    display:flex; flex-direction:column;
+    overflow:hidden;
+  }
+  @media(min-width:640px){
+    .modal-overlay{ align-items:center; }
+    .modal{ height:70vh; border-radius:14px; }
+  }
+  .modal-head{
+    display:flex; align-items:center; gap:8px;
+    padding:12px 14px; border-bottom:1px solid var(--border);
+    font-family:'JetBrains Mono',monospace; font-size:12px; color:var(--muted);
+  }
+  .modal-head strong{ color:var(--text); }
+  .modal textarea{
+    flex:1; resize:none; border:0; outline:0;
+    background:#0b0c0f; color:#d7f9d0;
+    font-family:'JetBrains Mono',monospace; font-size:13px; line-height:1.5;
+    padding:14px;
+  }
+  .modal-foot{
+    display:flex; gap:8px; padding:12px 14px; border-top:1px solid var(--border);
+  }
+  .modal-foot .btn{ flex:1; justify-content:center; padding:12px; }
+
+  .toast{
+    position:fixed; bottom:18px; left:50%; transform:translateX(-50%) translateY(20px);
+    background:var(--panel-2); border:1px solid var(--border); color:var(--text);
+    font-family:'JetBrains Mono',monospace; font-size:12px;
+    padding:8px 14px; border-radius:8px;
+    opacity:0; pointer-events:none; transition:opacity .2s, transform .2s;
+    z-index:30000;
+  }
+  .toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+
+  body{ display:flex; flex-direction:column; overflow:hidden; }
+  .topbar{ position:static; height:auto; flex:0 0 auto; flex-wrap:wrap; padding:8px 10px; }
+  .canvas-wrap{ position:relative; flex:1 1 auto; top:auto; }
+  .topbar-row{ display:flex; align-items:center; gap:8px; width:100%; flex-wrap:wrap; }
+  .zoom-layer{ position:relative; }
+  .canvas{ position:absolute; top:0; left:0; transform-origin:0 0; }
+  .zoom-controls{ display:flex; align-items:center; gap:4px; }
+  .zoom-controls button{
+    width:30px; height:30px; border-radius:6px; border:1px solid var(--border);
+    background:var(--panel-2); color:var(--text); font-family:'JetBrains Mono',monospace;
+    font-size:14px; cursor:pointer;
+  }
+  .zoom-label{
+    min-width:44px; text-align:center; font-family:'JetBrains Mono',monospace;
+    font-size:11px; color:var(--muted); cursor:pointer; user-select:none;
+  }
+  .profile-select{
+    background:var(--panel-2); color:var(--text); border:1px solid var(--border);
+    border-radius:8px; padding:8px 10px; font-family:'JetBrains Mono',monospace;
+    font-size:12px; max-width:150px;
+  }
+  .sync-badge{
+    font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--muted);
+    padding:6px 10px; border:1px solid var(--border); border-radius:8px;
+    background:var(--panel-2); white-space:nowrap;
+  }
+  .sync-badge.ok{ color:var(--view); border-color:#175a52; }
+  .sync-badge.busy{ color:var(--edit); border-color:var(--edit-dim); }
+  .sync-badge.err{ color:var(--danger); border-color:#4a2530; }
+</style>
+
+</head>
+<body class="mode-edit">
+
+  <div class="topbar">
+    <div class="topbar-row">
+      <span class="brand">PANOU IFRAME</span>
+      <select class="profile-select" id="profileSelect" title="Profil"></select>
+      <button class="btn" id="btnNewProfile" title="Profil nou">+ Profil</button>
+      <button class="btn" id="btnRenameProfile" title="Redenumește profilul">Redenumește</button>
+      <button class="btn danger" id="btnDeleteProfile" title="Șterge profilul">Șterge profil</button>
+      <span class="sync-badge" id="syncStatus">Se încarcă...</span>
+    </div>
+    <div class="topbar-row">
+      <button class="btn primary" id="btnAdd">+ Iframe</button>
+      <button class="btn danger" id="btnClear">Golește</button>
+      <div class="zoom-controls">
+        <button id="btnZoomOut" type="button">-</button>
+        <span class="zoom-label" id="zoomLabel" title="Resetează la 100%">100%</span>
+        <button id="btnZoomIn" type="button">+</button>
+      </div>
+      <div class="mode-toggle">
+        <button class="active edit" id="btnModeEdit" data-mode="edit">✎ Editare</button>
+        <button class="view" id="btnModeView" data-mode="view">▶ Vizualizare</button>
+      </div>
+    </div>
+  </div>
+
+
+  <div class="canvas-wrap" id="canvasWrap">
+    <div class="zoom-layer" id="zoomLayer">
+      <div class="canvas" id="canvas">
+        <div class="empty-hint" id="emptyHint">Apasă „+ Iframe” ca să adaugi primul panou.</div>
+      </div>
+    </div>
+  </div>
+
+
+  <div class="modal-overlay" id="modalOverlay">
+    <div class="modal">
+      <div class="modal-head"><strong id="modalTitle">Cod HTML</strong>&nbsp;— scrie sau lipește codul pentru acest iframe</div>
+      <textarea id="codeArea" spellcheck="false" autocapitalize="off" autocorrect="off"></textarea>
+      <div class="modal-foot">
+        <button class="btn" id="btnCancelCode">Anulează</button>
+        <button class="btn primary" id="btnSaveCode">Salvează codul</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+<script>
+(function(){
+  "use strict";
+
+  var SUPABASE_URL = "https://fndjrfieitieqzafhyzz.supabase.co";
+  var SUPABASE_KEY = "sb_publishable_bHDKjiKAVHqW199ICw7i2g_O3olYMAr";
+  var supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+  var TABLE = "canvas_profiles";
+
+  var DEVICE_PROFILE_KEY = "iframe_canvas_active_profile";
+  var CACHE_PREFIX = "iframe_canvas_cache_";
+  var ZOOM_PREFIX = "iframe_canvas_zoom_";
+  var CANVAS_SIZE = 2600;
+
+  var canvas = document.getElementById("canvas");
+  var zoomLayer = document.getElementById("zoomLayer");
+  var canvasWrap = document.getElementById("canvasWrap");
+  var emptyHint = document.getElementById("emptyHint");
+  var body = document.body;
+  var toastEl = document.getElementById("toast");
+
+  var state = { frames: [], nextZ: 1, nextIndex: 1 };
+  var frameEls = {};
+  var activeCodeFrameId = null;
+  var saveTimer = null;
+  var zoom = 1;
+  var currentProfileId = null;
+  var currentProfileName = "";
+
+  var DEFAULT_HTML =
+"<!-- Scrie aici codul tău HTML/CSS/JS -->\n" +
+"<div style=\"font-family:sans-serif;display:flex;align-items:center;" +
+"justify-content:center;height:100vh;margin:0;color:#333;\">\n" +
+"  Iframe nou\n" +
+"</div>";
+
+  function uid(){
+    return "f" + Date.now().toString(36) + Math.random().toString(36).slice(2,7);
+  }
+
+  function showToast(msg){
+    toastEl.textContent = msg;
+    toastEl.classList.add("show");
+    clearTimeout(showToast._t);
+    showToast._t = setTimeout(function(){ toastEl.classList.remove("show"); }, 1800);
+  }
+
+  function setSyncStatus(text, cls){
+    var el = document.getElementById("syncStatus");
+    el.textContent = text;
+    el.className = "sync-badge" + (cls ? " " + cls : "");
+  }
+
+  function updateEmptyHint(){
+    emptyHint.style.display = state.frames.length ? "none" : "block";
+  }
+
+  function applyZoom(){
+    var px = CANVAS_SIZE * zoom;
+    zoomLayer.style.width = px + "px";
+    zoomLayer.style.height = px + "px";
+    canvas.style.transform = "scale(" + zoom + ")";
+    document.getElementById("zoomLabel").textContent = Math.round(zoom * 100) + "%";
+  }
+
+  function setZoom(z){
+    zoom = Math.min(2, Math.max(0.25, z));
+    applyZoom();
+    if(currentProfileId){
+      try{ localStorage.setItem(ZOOM_PREFIX + currentProfileId, String(zoom)); }catch(e){}
+    }
+  }
+
+  function scheduleSave(){
+    if(!currentProfileId) return;
+    try{ localStorage.setItem(CACHE_PREFIX + currentProfileId, JSON.stringify(state)); }catch(e){}
+    setSyncStatus("Se salvează...", "busy");
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(pushToSupabase, 600);
+  }
+
+  function pushToSupabase(){
+    if(!currentProfileId) return;
+    supabaseClient
+      .from(TABLE)
+      .update({ state: state, updated_at: new Date().toISOString() })
+      .eq("id", currentProfileId)
+      .then(function(res){
+        if(res.error){
+          setSyncStatus("Eroare sync", "err");
+          showToast("Eroare la salvare online: " + res.error.message);
+        } else {
+          setSyncStatus("Salvat", "ok");
+        }
+      });
+  }
+
+  function bringToFront(data, el){
+    state.nextZ += 1;
+    data.z = state.nextZ;
+    el.style.zIndex = data.z;
+    scheduleSave();
+  }
+
+  function createFrameData(){
+    var wrapRect = canvasWrap.getBoundingClientRect();
+    var scrollX = canvasWrap.scrollLeft;
+    var scrollY = canvasWrap.scrollTop;
+    var x = Math.round((scrollX + wrapRect.width / 2) / zoom - 160 + (Math.random() * 40 - 20));
+    var y = Math.round((scrollY + 60) / zoom + (Math.random() * 40 - 20));
+    var idx = state.nextIndex++;
+    state.nextZ += 1;
+    return {
+      id: uid(),
+      x: Math.max(10, x), y: Math.max(10, y),
+      w: 320, h: 220,
+      z: state.nextZ,
+      html: DEFAULT_HTML,
+      label: "#" + idx
+    };
+  }
+
+  function addFrameEl(data){
+    var el = document.createElement("div");
+    el.className = "frame";
+    el.style.left = data.x + "px";
+    el.style.top = data.y + "px";
+    el.style.width = data.w + "px";
+    el.style.height = data.h + "px";
+    el.style.zIndex = data.z || 1;
+
+    el.innerHTML =
+      '<div class="frame-toolbar">' +
+        '<span class="frame-title">' + data.label + '</span>' +
+        '<button class="btn-refresh" type="button" title="Reîncarcă">⟳</button>' +
+        '<button class="btn-code" type="button">&lt;/&gt; Cod</button>' +
+        '<button class="del btn-del" type="button">✕</button>' +
+      '</div>' +
+      '<div class="move-grip" title="Trage pentru a muta">✥</div>' +
+      '<div class="frame-body"><iframe sandbox="allow-scripts allow-forms allow-popups allow-modals allow-popups-to-escape-sandbox"></iframe></div>' +
+      '<div class="edge edge-n" data-dir="n"></div>' +
+      '<div class="edge edge-s" data-dir="s"></div>' +
+      '<div class="edge edge-w" data-dir="w"></div>' +
+      '<div class="edge edge-e" data-dir="e"></div>' +
+      '<div class="corner corner-nw" data-dir="nw"></div>' +
+      '<div class="corner corner-ne" data-dir="ne"></div>' +
+      '<div class="corner corner-sw" data-dir="sw"></div>' +
+      '<div class="corner corner-se" data-dir="se"></div>';
+
+    canvas.appendChild(el);
+    frameEls[data.id] = { el: el, data: data };
+
+    var iframe = el.querySelector("iframe");
+    iframe.srcdoc = data.html;
+
+    var moveGrip = el.querySelector(".move-grip");
+    attachMove(moveGrip, data, el);
+
+    el.querySelectorAll(".edge, .corner").forEach(function(handle){
+      attachResize(handle, data, el);
+    });
+
+    el.querySelector(".btn-code").addEventListener("click", function(){
+      openCodeEditor(data.id);
+    });
+    el.querySelector(".btn-refresh").addEventListener("click", function(){
+      refreshFrame(data.id);
+    });
+    el.querySelector(".btn-del").addEventListener("click", function(){
+      deleteFrame(data.id);
+    });
+
+    el.addEventListener("pointerdown", function(){
+      bringToFront(data, el);
+    }, {capture:true});
+
+    updateEmptyHint();
+  }
+
+  function refreshFrame(id){
+    var entry = frameEls[id];
+    if(!entry) return;
+    var iframe = entry.el.querySelector("iframe");
+    iframe.srcdoc = "about:blank";
+    requestAnimationFrame(function(){
+      iframe.srcdoc = entry.data.html;
+    });
+    showToast("Iframe reîncărcat");
+  }
+
+  function attachMove(handle, data, el){
+    var startX, startY, startLeft, startTop, dragging = false;
+    handle.addEventListener("pointerdown", function(ev){
+      if(body.classList.contains("mode-view")) return;
+      ev.preventDefault();
+      ev.stopPropagation();
+      dragging = true;
+      el.classList.add("dragging");
+      startX = ev.clientX; startY = ev.clientY;
+      startLeft = data.x; startTop = data.y;
+      handle.setPointerCapture(ev.pointerId);
+      bringToFront(data, el);
+    });
+    handle.addEventListener("pointermove", function(ev){
+      if(!dragging) return;
+      var dx = (ev.clientX - startX) / zoom;
+      var dy = (ev.clientY - startY) / zoom;
+      data.x = Math.max(0, startLeft + dx);
+      data.y = Math.max(0, startTop + dy);
+      el.style.left = data.x + "px";
+      el.style.top = data.y + "px";
+    });
+    function endDrag(ev){
+      if(!dragging) return;
+      dragging = false;
+      el.classList.remove("dragging");
+      try{ handle.releasePointerCapture(ev.pointerId); }catch(e){}
+      scheduleSave();
+    }
+    handle.addEventListener("pointerup", endDrag);
+    handle.addEventListener("pointercancel", endDrag);
+  }
+
+  function attachResize(handle, data, el){
+    var dir = handle.getAttribute("data-dir");
+    var startX, startY, startW, startH, startLeft, startTop, dragging = false;
+    var MIN_W = 120, MIN_H = 90;
+
+    handle.addEventListener("pointerdown", function(ev){
+      if(body.classList.contains("mode-view")) return;
+      ev.preventDefault();
+      ev.stopPropagation();
+      dragging = true;
+      startX = ev.clientX; startY = ev.clientY;
+      startW = data.w; startH = data.h;
+      startLeft = data.x; startTop = data.y;
+      handle.setPointerCapture(ev.pointerId);
+      bringToFront(data, el);
+    });
+
+    handle.addEventListener("pointermove", function(ev){
+      if(!dragging) return;
+      var dx = (ev.clientX - startX) / zoom;
+      var dy = (ev.clientY - startY) / zoom;
+
+      if(dir.indexOf("e") !== -1){
+        data.w = Math.max(MIN_W, startW + dx);
+      }
+      if(dir.indexOf("s") !== -1){
+        data.h = Math.max(MIN_H, startH + dy);
+      }
+      if(dir.indexOf("w") !== -1){
+        var newW = Math.max(MIN_W, startW - dx);
+        var actualDx = startW - newW;
+        data.w = newW;
+        data.x = startLeft + actualDx;
+      }
+      if(dir.indexOf("n") !== -1){
+        var newH = Math.max(MIN_H, startH - dy);
+        var actualDy = startH - newH;
+        data.h = newH;
+        data.y = startTop + actualDy;
+      }
+
+      el.style.left = data.x + "px";
+      el.style.top = data.y + "px";
+      el.style.width = data.w + "px";
+      el.style.height = data.h + "px";
+    });
+
+    function endDrag(ev){
+      if(!dragging) return;
+      dragging = false;
+      try{ handle.releasePointerCapture(ev.pointerId); }catch(e){}
+      scheduleSave();
+    }
+    handle.addEventListener("pointerup", endDrag);
+    handle.addEventListener("pointercancel", endDrag);
+  }
+
+  function deleteFrame(id){
+    var entry = frameEls[id];
+    if(!entry) return;
+    if(!confirm("Ștergi acest iframe?")) return;
+    entry.el.remove();
+    delete frameEls[id];
+    state.frames = state.frames.filter(function(f){ return f.id !== id; });
+    updateEmptyHint();
+    scheduleSave();
+  }
+
+  function openCodeEditor(id){
+    var entry = frameEls[id];
+    if(!entry) return;
+    activeCodeFrameId = id;
+    document.getElementById("modalTitle").textContent = "Cod HTML — " + entry.data.label;
+    document.getElementById("codeArea").value = entry.data.html;
+    document.getElementById("modalOverlay").classList.add("open");
+  }
+
+  function closeCodeEditor(){
+    document.getElementById("modalOverlay").classList.remove("open");
+    activeCodeFrameId = null;
+  }
+
+  function saveCodeEditor(){
+    if(!activeCodeFrameId) return;
+    var entry = frameEls[activeCodeFrameId];
+    if(!entry) return;
+    var newHtml = document.getElementById("codeArea").value;
+    entry.data.html = newHtml;
+    entry.el.querySelector("iframe").srcdoc = newHtml;
+    scheduleSave();
+    closeCodeEditor();
+    showToast("Cod salvat");
+  }
+
+  function setMode(mode){
+    body.classList.toggle("mode-edit", mode === "edit");
+    body.classList.toggle("mode-view", mode === "view");
+    document.getElementById("btnModeEdit").classList.toggle("active", mode === "edit");
+    document.getElementById("btnModeView").classList.toggle("active", mode === "view");
+    Object.keys(frameEls).forEach(function(id){
+      var iframe = frameEls[id].el.querySelector("iframe");
+      if(mode === "view"){
+        iframe.srcdoc = frameEls[id].data.html;
+      }
+    });
+  }
+
+  function applyProfile(id, name, newState){
+    currentProfileId = id;
+    currentProfileName = name;
+    state = (newState && Array.isArray(newState.frames)) ? newState : { frames: [], nextZ: 1, nextIndex: 1 };
+    if(typeof state.nextZ !== "number") state.nextZ = 1;
+    if(typeof state.nextIndex !== "number") state.nextIndex = 1;
+    Object.keys(frameEls).forEach(function(fid){ frameEls[fid].el.remove(); });
+    frameEls = {};
+    state.frames.forEach(addFrameEl);
+    updateEmptyHint();
+    try{ localStorage.setItem(DEVICE_PROFILE_KEY, id); }catch(e){}
+    var savedZoom = 1;
+    try{
+      var zRaw = localStorage.getItem(ZOOM_PREFIX + id);
+      if(zRaw) savedZoom = parseFloat(zRaw);
+    }catch(e){}
+    zoom = isNaN(savedZoom) ? 1 : savedZoom;
+    applyZoom();
+  }
+
+  function refreshProfileSelect(list, selectedId){
+    var sel = document.getElementById("profileSelect");
+    sel.innerHTML = "";
+    list.forEach(function(p){
+      var opt = document.createElement("option");
+      opt.value = p.id;
+      opt.textContent = p.name;
+      if(p.id === selectedId) opt.selected = true;
+      sel.appendChild(opt);
+    });
+  }
+
+  function fetchProfilesList(){
+    return supabaseClient
+      .from(TABLE)
+      .select("id,name,updated_at")
+      .order("updated_at", { ascending:false })
+      .then(function(res){
+        if(res.error) throw res.error;
+        return res.data || [];
+      });
+  }
+
+  function loadProfile(id){
+    setSyncStatus("Se încarcă...", "busy");
+    return supabaseClient
+      .from(TABLE)
+      .select("id,name,state")
+      .eq("id", id)
+      .single()
+      .then(function(res){
+        if(res.error) throw res.error;
+        applyProfile(res.data.id, res.data.name, res.data.state);
+        try{ localStorage.setItem(CACHE_PREFIX + id, JSON.stringify(res.data.state)); }catch(e){}
+        setSyncStatus("Salvat", "ok");
+      })
+      .catch(function(err){
+        var cached = null;
+        try{ cached = localStorage.getItem(CACHE_PREFIX + id); }catch(e){}
+        if(cached){
+          applyProfile(id, currentProfileName || "Profil", JSON.parse(cached));
+          setSyncStatus("Offline (cache local)", "err");
+          showToast("Fără conexiune, folosesc datele salvate local");
+        } else {
+          setSyncStatus("Eroare încărcare", "err");
+          showToast("Nu am putut încărca profilul: " + (err && err.message ? err.message : err));
+        }
+      });
+  }
+
+  function createProfile(){
+    var name = prompt("Numele noului profil:", "Profil nou");
+    if(name === null) return;
+    name = name.trim() || "Profil nou";
+    setSyncStatus("Se creează...", "busy");
+    supabaseClient
+      .from(TABLE)
+      .insert({ name: name, state: { frames: [], nextZ: 1, nextIndex: 1 } })
+      .select()
+      .single()
+      .then(function(res){
+        if(res.error){
+          showToast("Eroare la creare profil: " + res.error.message);
+          setSyncStatus("Eroare", "err");
+          return;
+        }
+        fetchProfilesList().then(function(list){
+          refreshProfileSelect(list, res.data.id);
+          applyProfile(res.data.id, res.data.name, res.data.state);
+          setSyncStatus("Salvat", "ok");
+        });
+      });
+  }
+
+  function renameProfile(){
+    if(!currentProfileId) return;
+    var name = prompt("Nume nou pentru profil:", currentProfileName);
+    if(name === null) return;
+    name = name.trim();
+    if(!name) return;
+    supabaseClient
+      .from(TABLE)
+      .update({ name: name })
+      .eq("id", currentProfileId)
+      .then(function(res){
+        if(res.error){
+          showToast("Eroare la redenumire: " + res.error.message);
+          return;
+        }
+        currentProfileName = name;
+        var sel = document.getElementById("profileSelect");
+        var opt = sel.querySelector('option[value="' + currentProfileId + '"]');
+        if(opt) opt.textContent = name;
+        showToast("Profil redenumit");
+      });
+  }
+
+  function deleteProfileHandler(){
+    if(!currentProfileId) return;
+    var sel = document.getElementById("profileSelect");
+    if(sel.options.length <= 1){
+      showToast("Trebuie să existe cel puțin un profil");
+      return;
+    }
+    if(!confirm('Ștergi profilul "' + currentProfileName + '" și toate iframe-urile lui?')) return;
+    var deletedId = currentProfileId;
+    supabaseClient
+      .from(TABLE)
+      .delete()
+      .eq("id", deletedId)
+      .then(function(res){
+        if(res.error){
+          showToast("Eroare la ștergere: " + res.error.message);
+          return;
+        }
+        try{ localStorage.removeItem(CACHE_PREFIX + deletedId); }catch(e){}
+        try{ localStorage.removeItem(ZOOM_PREFIX + deletedId); }catch(e){}
+        fetchProfilesList().then(function(list){
+          refreshProfileSelect(list, list.length ? list[0].id : null);
+          if(list.length){
+            loadProfile(list[0].id);
+          }
+        });
+      });
+  }
+
+  document.getElementById("btnAdd").addEventListener("click", function(){
+    var data = createFrameData();
+    state.frames.push(data);
+    addFrameEl(data);
+    scheduleSave();
+  });
+
+  document.getElementById("btnClear").addEventListener("click", function(){
+    if(!state.frames.length) return;
+    if(!confirm("Ștergi toate iframe-urile din acest profil? Nu se poate anula.")) return;
+    state.frames = [];
+    Object.keys(frameEls).forEach(function(id){ frameEls[id].el.remove(); });
+    frameEls = {};
+    updateEmptyHint();
+    scheduleSave();
+  });
+
+  document.getElementById("btnModeEdit").addEventListener("click", function(){ setMode("edit"); });
+  document.getElementById("btnModeView").addEventListener("click", function(){ setMode("view"); });
+
+  document.getElementById("btnCancelCode").addEventListener("click", closeCodeEditor);
+  document.getElementById("btnSaveCode").addEventListener("click", saveCodeEditor);
+  document.getElementById("modalOverlay").addEventListener("click", function(ev){
+    if(ev.target === this) closeCodeEditor();
+  });
+
+  document.getElementById("btnNewProfile").addEventListener("click", createProfile);
+  document.getElementById("btnRenameProfile").addEventListener("click", renameProfile);
+  document.getElementById("btnDeleteProfile").addEventListener("click", deleteProfileHandler);
+  document.getElementById("profileSelect").addEventListener("change", function(){
+    loadProfile(this.value);
+  });
+  document.getElementById("btnZoomIn").addEventListener("click", function(){ setZoom(zoom + 0.1); });
+  document.getElementById("btnZoomOut").addEventListener("click", function(){ setZoom(zoom - 0.1); });
+  document.getElementById("zoomLabel").addEventListener("click", function(){ setZoom(1); });
+
+  function init(){
+    applyZoom();
+    fetchProfilesList()
+      .then(function(list){
+        if(!list.length){
+          return supabaseClient
+            .from(TABLE)
+            .insert({ name: "Profil 1", state: { frames: [], nextZ: 1, nextIndex: 1 } })
+            .select()
+            .single()
+            .then(function(res){
+              if(res.error) throw res.error;
+              return [res.data];
+            });
+        }
+        return list;
+      })
+      .then(function(list){
+        refreshProfileSelect(list, null);
+        var lastId = null;
+        try{ lastId = localStorage.getItem(DEVICE_PROFILE_KEY); }catch(e){}
+        var target = list.filter(function(p){ return p.id === lastId; })[0] || list[0];
+        document.getElementById("profileSelect").value = target.id;
+        return loadProfile(target.id);
+      })
+      .catch(function(err){
+        setSyncStatus("Fără conexiune", "err");
+        showToast("Nu m-am putut conecta la Supabase. Verifică internetul.");
+        var lastId = null;
+        try{ lastId = localStorage.getItem(DEVICE_PROFILE_KEY); }catch(e){}
+        if(lastId){
+          var cached = null;
+          try{ cached = localStorage.getItem(CACHE_PREFIX + lastId); }catch(e){}
+          if(cached){
+            applyProfile(lastId, "Profil (local)", JSON.parse(cached));
+          }
+        }
+      });
+  }
+
+  init();
+})();
+</script>
+
+</body>
+</html>
