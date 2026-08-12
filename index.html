@@ -432,6 +432,9 @@
   var zoom = 1;
   var currentProfileId = null;
   var currentProfileName = "";
+var realtimeChannel = null;
+var lastPushedStateJSON = null;
+
 
   var DEFAULT_HTML =
 "<!-- Scrie aici codul tău HTML/CSS/JS -->\n" +
@@ -529,21 +532,101 @@
     saveTimer = setTimeout(pushToSupabase, 600);
   }
 
-  function pushToSupabase(){
-    if(!currentProfileId) return;
-    supabaseClient
-      .from(TABLE)
-      .update({ state: state, updated_at: new Date().toISOString() })
-      .eq("id", currentProfileId)
-      .then(function(res){
-        if(res.error){
-          setSyncStatus("Eroare sync", "err");
-          showToast("Eroare la salvare online: " + res.error.message);
-        } else {
-          setSyncStatus("Salvat", "ok");
-        }
-      });
+function pushToSupabase(){
+  if(!currentProfileId) return;
+  var payloadJSON = JSON.stringify(state);
+  lastPushedStateJSON = payloadJSON;
+  supabaseClient
+    .from(TABLE)
+    .update({ state: state, updated_at: new Date().toISOString() })
+    .eq("id", currentProfileId)
+    .then(function(res){
+      if(res.error){
+        setSyncStatus("Eroare sync", "err");
+        showToast("Eroare la salvare online: " + res.error.message);
+      } else {
+        setSyncStatus("Salvat", "ok");
+      }
+    });
+}
+
+
+function subscribeRealtime(id){
+  if(realtimeChannel){
+    supabaseClient.removeChannel(realtimeChannel);
+    realtimeChannel = null;
   }
+  realtimeChannel = supabaseClient
+    .channel("canvas_profile_" + id)
+    .on("postgres_changes",
+      { event: "UPDATE", schema: "public", table: TABLE, filter: "id=eq." + id },
+      function(payload){
+        if(!payload.new) return;
+        var incomingJSON = JSON.stringify(payload.new.state);
+        if(incomingJSON === lastPushedStateJSON) return;
+        applyRemoteState(payload.new.state);
+      }
+    )
+    .subscribe();
+}
+
+function applyRemoteState(newState){
+  if(!newState || !Array.isArray(newState.frames)) return;
+  state.nextZ = Math.max(state.nextZ || 1, newState.nextZ || 1);
+  state.nextIndex = Math.max(state.nextIndex || 1, newState.nextIndex || 1);
+
+  var newIds = {};
+  newState.frames.forEach(function(nf){
+    newIds[nf.id] = true;
+    var entry = frameEls[nf.id];
+
+    if(!entry){
+      state.frames.push(nf);
+      addFrameEl(nf);
+      return;
+    }
+
+    var el = entry.el;
+    if(el.dataset.locked) return; // se editează local chiar acum, nu suprascrie
+
+    var data = entry.data;
+    var changedPos = (data.x !== nf.x || data.y !== nf.y || data.w !== nf.w || data.h !== nf.h);
+    if(changedPos){
+      data.x = nf.x; data.y = nf.y; data.w = nf.w; data.h = nf.h;
+      el.style.left = data.x + "px";
+      el.style.top = data.y + "px";
+      el.style.width = data.w + "px";
+      el.style.height = data.h + "px";
+    }
+
+    if(data.z !== nf.z){
+      data.z = nf.z;
+      el.style.zIndex = data.z;
+    }
+
+    if(data.label !== nf.label){
+      data.label = nf.label;
+      var titleEl = el.querySelector(".frame-title");
+      if(titleEl) titleEl.textContent = data.label;
+    }
+
+    if(data.html !== nf.html || data.url !== nf.url){
+      data.html = nf.html;
+      data.url = nf.url;
+      applyFrameSource(el.querySelector("iframe"), data);
+    }
+  });
+
+  Object.keys(frameEls).forEach(function(id){
+    if(!newIds[id]){
+      frameEls[id].el.remove();
+      delete frameEls[id];
+    }
+  });
+
+  state.frames = state.frames.filter(function(f){ return newIds[f.id]; });
+  updateEmptyHint();
+}
 
   function bringToFront(data, el){
     state.nextZ += 1;
@@ -643,19 +726,21 @@
   }
 
 
-  function attachMove(handle, data, el){
-    var startX, startY, startLeft, startTop, dragging = false;
-    handle.addEventListener("pointerdown", function(ev){
-      if(body.classList.contains("mode-view")) return;
-      ev.preventDefault();
-      ev.stopPropagation();
-      dragging = true;
-      el.classList.add("dragging");
-      startX = ev.clientX; startY = ev.clientY;
-      startLeft = data.x; startTop = data.y;
-      handle.setPointerCapture(ev.pointerId);
-      bringToFront(data, el);
-    });
+function attachMove(handle, data, el){
+  var startX, startY, startLeft, startTop, dragging = false;
+  handle.addEventListener("pointerdown", function(ev){
+    if(body.classList.contains("mode-view")) return;
+    ev.preventDefault();
+    ev.stopPropagation();
+    dragging = true;
+    el.dataset.locked = "1";
+    el.classList.add("dragging");
+    startX = ev.clientX; startY = ev.clientY;
+    startLeft = data.x; startTop = data.y;
+    handle.setPointerCapture(ev.pointerId);
+    bringToFront(data, el);
+  });
+
     handle.addEventListener("pointermove", function(ev){
       if(!dragging) return;
       var dx = (ev.clientX - startX) / zoom;
@@ -673,14 +758,16 @@
       el.style.left = data.x + "px";
       el.style.top = data.y + "px";
     });
-    function endDrag(ev){
-      if(!dragging) return;
-      dragging = false;
-      el.classList.remove("dragging");
-      hideGuides();
-      try{ handle.releasePointerCapture(ev.pointerId); }catch(e){}
-      scheduleSave();
-    }
+  function endDrag(ev){
+    if(!dragging) return;
+    dragging = false;
+    delete el.dataset.locked;
+    el.classList.remove("dragging");
+    hideGuides();
+    try{ handle.releasePointerCapture(ev.pointerId); }catch(e){}
+    scheduleSave();
+  }
+
     handle.addEventListener("pointerup", endDrag);
     handle.addEventListener("pointercancel", endDrag);
   }
@@ -696,12 +783,14 @@
       ev.preventDefault();
       ev.stopPropagation();
       dragging = true;
+      el.dataset.locked = "1";
       startX = ev.clientX; startY = ev.clientY;
       startW = data.w; startH = data.h;
       startLeft = data.x; startTop = data.y;
       handle.setPointerCapture(ev.pointerId);
       bringToFront(data, el);
     });
+
 
     handle.addEventListener("pointermove", function(ev){
       if(!dragging) return;
@@ -794,10 +883,12 @@
     function endDrag(ev){
       if(!dragging) return;
       dragging = false;
+      delete el.dataset.locked;
       hideGuides();
       try{ handle.releasePointerCapture(ev.pointerId); }catch(e){}
       scheduleSave();
     }
+
     handle.addEventListener("pointerup", endDrag);
     handle.addEventListener("pointercancel", endDrag);
   }
@@ -879,25 +970,27 @@
 
   }
 
-  function applyProfile(id, name, newState){
-    currentProfileId = id;
-    currentProfileName = name;
-    state = (newState && Array.isArray(newState.frames)) ? newState : { frames: [], nextZ: 1, nextIndex: 1 };
-    if(typeof state.nextZ !== "number") state.nextZ = 1;
-    if(typeof state.nextIndex !== "number") state.nextIndex = 1;
-    Object.keys(frameEls).forEach(function(fid){ frameEls[fid].el.remove(); });
-    frameEls = {};
-    state.frames.forEach(addFrameEl);
-    updateEmptyHint();
-    try{ localStorage.setItem(DEVICE_PROFILE_KEY, id); }catch(e){}
-    var savedZoom = 1;
-    try{
-      var zRaw = localStorage.getItem(ZOOM_PREFIX + id);
-      if(zRaw) savedZoom = parseFloat(zRaw);
-    }catch(e){}
-    zoom = isNaN(savedZoom) ? 1 : savedZoom;
-    applyZoom();
-  }
+function applyProfile(id, name, newState){
+  currentProfileId = id;
+  currentProfileName = name;
+  state = (newState && Array.isArray(newState.frames)) ? newState : { frames: [], nextZ: 1, nextIndex: 1 };
+  if(typeof state.nextZ !== "number") state.nextZ = 1;
+  if(typeof state.nextIndex !== "number") state.nextIndex = 1;
+  Object.keys(frameEls).forEach(function(fid){ frameEls[fid].el.remove(); });
+  frameEls = {};
+  state.frames.forEach(addFrameEl);
+  updateEmptyHint();
+  try{ localStorage.setItem(DEVICE_PROFILE_KEY, id); }catch(e){}
+  var savedZoom = 1;
+  try{
+    var zRaw = localStorage.getItem(ZOOM_PREFIX + id);
+    if(zRaw) savedZoom = parseFloat(zRaw);
+  }catch(e){}
+  zoom = isNaN(savedZoom) ? 1 : savedZoom;
+  applyZoom();
+  subscribeRealtime(id);
+}
+
 
   function refreshProfileSelect(list, selectedId){
     var sel = document.getElementById("profileSelect");
