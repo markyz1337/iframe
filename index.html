@@ -251,10 +251,24 @@
   .sync-badge.ok{ color:var(--view); border-color:#175a52; }
   .sync-badge.busy{ color:var(--edit); border-color:var(--edit-dim); }
   .sync-badge.err{ color:var(--danger); border-color:#4a2530; }
+
+  body.ui-hidden .topbar{ display:none; }
+
+  .show-ui-btn{
+    position:fixed; bottom:14px; right:14px; z-index:40000;
+    width:44px; height:44px; border-radius:50%;
+    background:var(--panel-2); border:1px solid var(--border); color:var(--text);
+    display:none; align-items:center; justify-content:center;
+    font-size:18px; cursor:pointer; opacity:.55;
+  }
+  .show-ui-btn:active{ opacity:1; }
+  body.ui-hidden .show-ui-btn{ display:flex; }
 </style>
 
+
 </head>
-<body class="mode-edit">
+<body class="mode-view">
+
 
   <div class="topbar">
     <div class="topbar-row">
@@ -274,11 +288,15 @@
         <button id="btnZoomIn" type="button">+</button>
       </div>
       <div class="mode-toggle">
-        <button class="active edit" id="btnModeEdit" data-mode="edit">✎ Editare</button>
-        <button class="view" id="btnModeView" data-mode="view">▶ Vizualizare</button>
+        <button class="edit" id="btnModeEdit" data-mode="edit">✎ Editare</button>
+        <button class="active view" id="btnModeView" data-mode="view">▶ Vizualizare</button>
       </div>
+      <button class="btn" id="btnHideUI" title="Ascunde interfața">⌄ Ascunde UI</button>
     </div>
   </div>
+
+  <button class="show-ui-btn" id="btnShowUI" title="Arată interfața">⚙</button>
+
 
 
   <div class="canvas-wrap" id="canvasWrap">
@@ -811,9 +829,30 @@
   document.getElementById("profileSelect").addEventListener("change", function(){
     loadProfile(this.value);
   });
-  document.getElementById("btnZoomIn").addEventListener("click", function(){ setZoom(zoom + 0.1); });
+   document.getElementById("btnZoomIn").addEventListener("click", function(){ setZoom(zoom + 0.1); });
   document.getElementById("btnZoomOut").addEventListener("click", function(){ setZoom(zoom - 0.1); });
   document.getElementById("zoomLabel").addEventListener("click", function(){ setZoom(1); });
+
+  var UI_HIDDEN_KEY = "iframe_canvas_ui_hidden";
+  function setUIHidden(hidden){
+    body.classList.toggle("ui-hidden", hidden);
+    try{ localStorage.setItem(UI_HIDDEN_KEY, hidden ? "1" : "0"); }catch(e){}
+  }
+  document.getElementById("btnHideUI").addEventListener("click", function(){
+    setUIHidden(true);
+    setMode("view");
+  });
+  document.getElementById("btnShowUI").addEventListener("click", function(){
+    setUIHidden(false);
+    setMode("edit");
+  });
+  (function initUIHidden(){
+    var stored = null;
+    try{ stored = localStorage.getItem(UI_HIDDEN_KEY); }catch(e){}
+    setUIHidden(stored === null ? true : stored === "1");
+  })();
+
+
 
   function init(){
     applyZoom();
