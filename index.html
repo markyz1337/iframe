@@ -172,7 +172,16 @@
   .corner-sw{ bottom:-8px; left:-8px; cursor:nesw-resize; }
   .corner-se{ bottom:-8px; right:-8px; cursor:nwse-resize; }
 
+  .snap-guide{
+    position:absolute; background:var(--edit);
+    z-index:9000; pointer-events:none; display:none;
+    box-shadow:0 0 4px rgba(245,166,35,.8);
+  }
+  .snap-guide-v{ top:0; bottom:0; width:1px; }
+  .snap-guide-h{ left:0; right:0; height:1px; }
+
   .empty-hint{
+
     position:absolute; top:110px; left:50%; transform:translateX(-50%);
     color:var(--muted); font-family:'JetBrains Mono',monospace; font-size:13px;
     text-align:center; white-space:nowrap;
@@ -302,7 +311,10 @@
   <div class="canvas-wrap" id="canvasWrap">
     <div class="zoom-layer" id="zoomLayer">
       <div class="canvas" id="canvas">
+        <div class="snap-guide snap-guide-v" id="guideV"></div>
+        <div class="snap-guide snap-guide-h" id="guideH"></div>
         <div class="empty-hint" id="emptyHint">Apasă „+ Iframe” ca să adaugi primul panou.</div>
+
       </div>
     </div>
   </div>
@@ -334,6 +346,8 @@
   var CACHE_PREFIX = "iframe_canvas_cache_";
   var ZOOM_PREFIX = "iframe_canvas_zoom_";
   var CANVAS_SIZE = 2600;
+  var SNAP_THRESHOLD_SCREEN = 8;
+
 
   var canvas = document.getElementById("canvas");
   var zoomLayer = document.getElementById("zoomLayer");
@@ -373,6 +387,48 @@
     el.textContent = text;
     el.className = "sync-badge" + (cls ? " " + cls : "");
   }
+
+  var guideV = document.getElementById("guideV");
+  var guideH = document.getElementById("guideH");
+
+  function showGuideV(x){
+    guideV.style.left = x + "px";
+    guideV.style.display = "block";
+  }
+  function showGuideH(y){
+    guideH.style.top = y + "px";
+    guideH.style.display = "block";
+  }
+  function hideGuides(){
+    guideV.style.display = "none";
+    guideH.style.display = "none";
+  }
+
+  function collectEdges(excludeId){
+    var xs = [], ys = [], ws = [], hs = [];
+    state.frames.forEach(function(f){
+      if(f.id === excludeId) return;
+      xs.push(f.x, f.x + f.w / 2, f.x + f.w);
+      ys.push(f.y, f.y + f.h / 2, f.y + f.h);
+      ws.push(f.w);
+      hs.push(f.h);
+    });
+    return { xs: xs, ys: ys, ws: ws, hs: hs };
+  }
+
+  function closestSnap(candidates, targets, threshold){
+    var best = null;
+    candidates.forEach(function(c){
+      targets.forEach(function(t){
+        var diff = t - c;
+        if(Math.abs(diff) <= threshold && (!best || Math.abs(diff) < Math.abs(best.delta))){
+          best = { delta: diff, guideValue: t };
+        }
+      });
+    });
+    return best;
+  }
+
 
   function updateEmptyHint(){
     emptyHint.style.display = state.frames.length ? "none" : "block";
@@ -530,6 +586,14 @@
       var dy = (ev.clientY - startY) / zoom;
       data.x = Math.max(0, startLeft + dx);
       data.y = Math.max(0, startTop + dy);
+
+      var edges = collectEdges(data.id);
+      var thresh = SNAP_THRESHOLD_SCREEN / zoom;
+      var snapX = closestSnap([data.x, data.x + data.w / 2, data.x + data.w], edges.xs, thresh);
+      var snapY = closestSnap([data.y, data.y + data.h / 2, data.y + data.h], edges.ys, thresh);
+      if(snapX){ data.x += snapX.delta; showGuideV(snapX.guideValue); } else { guideV.style.display = "none"; }
+      if(snapY){ data.y += snapY.delta; showGuideH(snapY.guideValue); } else { guideH.style.display = "none"; }
+
       el.style.left = data.x + "px";
       el.style.top = data.y + "px";
     });
@@ -537,6 +601,7 @@
       if(!dragging) return;
       dragging = false;
       el.classList.remove("dragging");
+      hideGuides();
       try{ handle.releasePointerCapture(ev.pointerId); }catch(e){}
       scheduleSave();
     }
@@ -545,6 +610,7 @@
   }
 
   function attachResize(handle, data, el){
+
     var dir = handle.getAttribute("data-dir");
     var startX, startY, startW, startH, startLeft, startTop, dragging = false;
     var MIN_W = 120, MIN_H = 90;
@@ -585,6 +651,64 @@
         data.y = startTop + actualDy;
       }
 
+      var edges = collectEdges(data.id);
+      var thresh = SNAP_THRESHOLD_SCREEN / zoom;
+      var showedV = false, showedH = false;
+
+      if(dir.indexOf("e") !== -1){
+        var snapRight = closestSnap([data.x + data.w], edges.xs, thresh);
+        if(snapRight){ data.w += snapRight.delta; showGuideV(snapRight.guideValue); showedV = true; }
+        else {
+          var snapW = closestSnap([data.w], edges.ws, thresh);
+          if(snapW){ data.w += snapW.delta; }
+        }
+      }
+      if(dir.indexOf("w") !== -1){
+        var snapLeft = closestSnap([data.x], edges.xs, thresh);
+        if(snapLeft){
+          var newLeft = data.x + snapLeft.delta;
+          data.w += (data.x - newLeft);
+          data.x = newLeft;
+          showGuideV(snapLeft.guideValue);
+          showedV = true;
+        } else {
+          var snapW2 = closestSnap([data.w], edges.ws, thresh);
+          if(snapW2){
+            var deltaW = snapW2.delta;
+            data.w += deltaW;
+            data.x -= deltaW;
+          }
+        }
+      }
+      if(dir.indexOf("s") !== -1){
+        var snapBottom = closestSnap([data.y + data.h], edges.ys, thresh);
+        if(snapBottom){ data.h += snapBottom.delta; showGuideH(snapBottom.guideValue); showedH = true; }
+        else {
+          var snapH = closestSnap([data.h], edges.hs, thresh);
+          if(snapH){ data.h += snapH.delta; }
+        }
+      }
+      if(dir.indexOf("n") !== -1){
+        var snapTop = closestSnap([data.y], edges.ys, thresh);
+        if(snapTop){
+          var newTop = data.y + snapTop.delta;
+          data.h += (data.y - newTop);
+          data.y = newTop;
+          showGuideH(snapTop.guideValue);
+          showedH = true;
+        } else {
+          var snapH2 = closestSnap([data.h], edges.hs, thresh);
+          if(snapH2){
+            var deltaH = snapH2.delta;
+            data.h += deltaH;
+            data.y -= deltaH;
+          }
+        }
+      }
+
+      if(!showedV) guideV.style.display = "none";
+      if(!showedH) guideH.style.display = "none";
+
       el.style.left = data.x + "px";
       el.style.top = data.y + "px";
       el.style.width = data.w + "px";
@@ -594,12 +718,14 @@
     function endDrag(ev){
       if(!dragging) return;
       dragging = false;
+      hideGuides();
       try{ handle.releasePointerCapture(ev.pointerId); }catch(e){}
       scheduleSave();
     }
     handle.addEventListener("pointerup", endDrag);
     handle.addEventListener("pointercancel", endDrag);
   }
+
 
   function deleteFrame(id){
     var entry = frameEls[id];
