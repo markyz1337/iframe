@@ -33,22 +33,32 @@
     -webkit-tap-highlight-color:transparent;
   }
   .topbar{
-    position:fixed; top:0; left:0; right:0; height:56px;
-    display:flex; align-items:center; gap:8px;
-    padding:0 10px;
+    display:flex; align-items:center; gap:6px;
+    padding:18px 10px;
     background:var(--panel);
     border-bottom:1px solid var(--border);
     z-index:10000;
+    overflow-x:auto; overflow-y:hidden;
+    scrollbar-width:none; -ms-overflow-style:none;
     font-family:'JetBrains Mono',monospace;
   }
-  .brand{
-    font-weight:700; font-size:13px; letter-spacing:.5px;
-    color:var(--muted);
-    padding-right:8px;
-    white-space:nowrap;
-    display:none;
+  .topbar::-webkit-scrollbar{ display:none; }
+
+  .tb-group{ display:flex; align-items:center; gap:4px; flex:0 0 auto; }
+  .tb-divider{ width:1px; height:22px; flex:0 0 auto; background:var(--border); margin:0 2px; }
+
+  .icon-btn{
+    appearance:none; border:1px solid var(--border); background:var(--panel-2);
+    color:var(--muted); width:34px; height:34px; padding:0; border-radius:9px;
+    display:flex; align-items:center; justify-content:center;
+    cursor:pointer; flex:0 0 auto;
   }
-  @media(min-width:640px){ .brand{display:block;} }
+  .icon-btn svg{ width:16px; height:16px; display:block; }
+  .icon-btn:active{ transform:scale(.92); }
+  .icon-btn.primary{ background:var(--edit); border-color:var(--edit); color:#1a1400; }
+  .icon-btn.danger{ color:var(--danger); }
+  .icon-btn.danger:active{ background:#2a1015; }
+
   .btn{
     appearance:none; border:1px solid var(--border); background:var(--panel-2);
     color:var(--text); font-family:'JetBrains Mono',monospace; font-size:12px;
@@ -59,18 +69,19 @@
   .btn:active{ transform:scale(.97); }
   .btn.primary{ background:var(--edit); color:#1a1400; border-color:var(--edit); font-weight:700;}
   .btn.danger{ color:var(--danger); border-color:#4a2530; }
+
   .mode-toggle{
-    margin-left:auto;
-    display:flex; align-items:center; gap:0;
-    border:1px solid var(--border); border-radius:8px; overflow:hidden;
+    display:flex; align-items:center;
+    border:1px solid var(--border); border-radius:9px; overflow:hidden; flex:0 0 auto;
   }
   .mode-toggle button{
     appearance:none; border:none; background:var(--panel-2); color:var(--muted);
-    font-family:'JetBrains Mono',monospace; font-size:12px; font-weight:700;
-    padding:9px 12px; cursor:pointer;
+    width:34px; height:34px; display:flex; align-items:center; justify-content:center; cursor:pointer;
   }
+  .mode-toggle button svg{ width:16px; height:16px; }
   .mode-toggle button.active.edit{ background:var(--edit); color:#1a1400; }
   .mode-toggle button.active.view{ background:var(--view); color:#022; }
+
 
   .canvas-wrap{
     position:absolute; top:56px; left:0; right:0; bottom:0;
@@ -232,34 +243,43 @@
   .toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
 
   body{ display:flex; flex-direction:column; overflow:hidden; }
-  .topbar{ position:static; height:auto; flex:0 0 auto; flex-wrap:wrap; padding:8px 10px; }
   .canvas-wrap{ position:relative; flex:1 1 auto; top:auto; }
-  .topbar-row{ display:flex; align-items:center; gap:8px; width:100%; flex-wrap:wrap; }
   .zoom-layer{ position:relative; }
   .canvas{ position:absolute; top:0; left:0; transform-origin:0 0; }
-  .zoom-controls{ display:flex; align-items:center; gap:4px; }
+
+  .zoom-controls{
+    display:flex; align-items:center;
+    border:1px solid var(--border); border-radius:9px; overflow:hidden; flex:0 0 auto;
+  }
   .zoom-controls button{
-    width:30px; height:30px; border-radius:6px; border:1px solid var(--border);
-    background:var(--panel-2); color:var(--text); font-family:'JetBrains Mono',monospace;
-    font-size:14px; cursor:pointer;
+    appearance:none; border:none; background:var(--panel-2); color:var(--text);
+    width:30px; height:34px; display:flex; align-items:center; justify-content:center; cursor:pointer;
   }
+  .zoom-controls button svg{ width:14px; height:14px; }
   .zoom-label{
-    min-width:44px; text-align:center; font-family:'JetBrains Mono',monospace;
-    font-size:11px; color:var(--muted); cursor:pointer; user-select:none;
+    min-width:42px; height:34px; display:flex; align-items:center; justify-content:center;
+    background:var(--panel-2); font-family:'JetBrains Mono',monospace; font-size:11px;
+    color:var(--muted); cursor:pointer; user-select:none;
   }
+
   .profile-select{
     background:var(--panel-2); color:var(--text); border:1px solid var(--border);
-    border-radius:8px; padding:8px 10px; font-family:'JetBrains Mono',monospace;
-    font-size:12px; max-width:150px;
+    border-radius:9px; height:34px; padding:0 8px;
+    font-family:'JetBrains Mono',monospace; font-size:12px;
+    max-width:130px; flex:0 0 auto;
   }
+
   .sync-badge{
+    display:flex; align-items:center; gap:7px; height:34px; padding:0 10px;
+    border:1px solid var(--border); border-radius:9px;
     font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--muted);
-    padding:6px 10px; border:1px solid var(--border); border-radius:8px;
-    background:var(--panel-2); white-space:nowrap;
+    white-space:nowrap; flex:0 0 auto;
   }
-  .sync-badge.ok{ color:var(--view); border-color:#175a52; }
-  .sync-badge.busy{ color:var(--edit); border-color:var(--edit-dim); }
-  .sync-badge.err{ color:var(--danger); border-color:#4a2530; }
+  .sync-dot{ width:7px; height:7px; border-radius:50%; background:var(--muted); flex:0 0 auto; }
+  .sync-dot.ok{ background:var(--view); }
+  .sync-dot.busy{ background:var(--edit); animation:sync-pulse 1s ease-in-out infinite; }
+  .sync-dot.err{ background:var(--danger); }
+  @keyframes sync-pulse{ 0%,100%{ opacity:1; } 50%{ opacity:.3; } }
 
   body.ui-hidden .topbar{ display:none; }
 
@@ -268,11 +288,22 @@
     width:44px; height:44px; border-radius:50%;
     background:var(--panel-2); border:1px solid var(--border); color:var(--text);
     display:none; align-items:center; justify-content:center;
-    font-size:18px; cursor:pointer; opacity:.55;
+    cursor:pointer; opacity:.55;
   }
+  .show-ui-btn svg{ width:18px; height:18px; }
   .show-ui-btn:active{ opacity:1; }
   body.ui-hidden .show-ui-btn{ display:flex; }
+
+  @media(max-width:420px){
+    .icon-btn, .mode-toggle button{ width:30px; height:30px; }
+    .zoom-controls button{ width:26px; height:30px; }
+    .zoom-label{ height:30px; min-width:36px; }
+    .profile-select{ height:30px; max-width:96px; font-size:11px; }
+    .sync-badge{ height:30px; padding:0 8px; }
+  }
+
 </style>
+
 
 
 </head>
@@ -280,31 +311,68 @@
 
 
   <div class="topbar">
-    <div class="topbar-row">
-      <span class="brand">PANOU IFRAME</span>
+    <div class="tb-group">
       <select class="profile-select" id="profileSelect" title="Profil"></select>
-      <button class="btn" id="btnNewProfile" title="Profil nou">+ Profil</button>
-      <button class="btn" id="btnRenameProfile" title="Redenumește profilul">Redenumește</button>
-      <button class="btn danger" id="btnDeleteProfile" title="Șterge profilul">Șterge profil</button>
-      <span class="sync-badge" id="syncStatus">Se încarcă...</span>
+      <button class="icon-btn" id="btnNewProfile" title="Profil nou">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+      </button>
+      <button class="icon-btn" id="btnRenameProfile" title="Redenumește profilul">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+      </button>
+      <button class="icon-btn danger" id="btnDeleteProfile" title="Șterge profilul">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>
+      </button>
     </div>
-    <div class="topbar-row">
-      <button class="btn primary" id="btnAdd">+ Iframe</button>
-      <button class="btn danger" id="btnClear">Golește</button>
-      <div class="zoom-controls">
-        <button id="btnZoomOut" type="button">-</button>
-        <span class="zoom-label" id="zoomLabel" title="Resetează la 100%">100%</span>
-        <button id="btnZoomIn" type="button">+</button>
-      </div>
-      <div class="mode-toggle">
-        <button class="edit" id="btnModeEdit" data-mode="edit">✎ Editare</button>
-        <button class="active view" id="btnModeView" data-mode="view">▶ Vizualizare</button>
-      </div>
-      <button class="btn" id="btnHideUI" title="Ascunde interfața">⌄ Ascunde UI</button>
+
+    <div class="tb-divider"></div>
+
+    <div class="tb-group">
+      <button class="icon-btn primary" id="btnAdd" title="Adaugă iframe">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+      </button>
+      <button class="icon-btn danger" id="btnClear" title="Golește profilul">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>
+      </button>
     </div>
+
+    <div class="tb-divider"></div>
+
+    <div class="tb-group zoom-controls">
+      <button id="btnZoomOut" type="button" title="Micșorează">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14"/></svg>
+      </button>
+      <span class="zoom-label" id="zoomLabel" title="Resetează la 100%">100%</span>
+      <button id="btnZoomIn" type="button" title="Mărește">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+      </button>
+    </div>
+
+    <div class="tb-divider"></div>
+
+    <div class="tb-group mode-toggle">
+      <button class="edit" id="btnModeEdit" data-mode="edit" title="Editare">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+      </button>
+      <button class="active view" id="btnModeView" data-mode="view" title="Vizualizare">
+        <svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M8 5v14l11-7z"/></svg>
+      </button>
+    </div>
+
+    <div class="tb-divider"></div>
+
+    <span class="sync-badge" id="syncStatus"><span class="sync-dot" id="syncDot"></span><span id="syncText">Se încarcă...</span></span>
+
+    <div class="tb-divider"></div>
+
+    <button class="icon-btn" id="btnHideUI" title="Ascunde interfața">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+    </button>
   </div>
 
-  <button class="show-ui-btn" id="btnShowUI" title="Arată interfața">⚙</button>
+  <button class="show-ui-btn" id="btnShowUI" title="Arată interfața">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21v-7"/><path d="M4 10V3"/><path d="M12 21v-9"/><path d="M12 8V3"/><path d="M20 21v-5"/><path d="M20 12V3"/><path d="M1 14h6"/><path d="M9 8h6"/><path d="M17 16h6"/></svg>
+  </button>
+
 
 
 
@@ -322,7 +390,8 @@
 
   <div class="modal-overlay" id="modalOverlay">
     <div class="modal">
-      <div class="modal-head"><strong id="modalTitle">Cod HTML</strong>&nbsp;— scrie sau lipește codul pentru acest iframe</div>
+      <div class="modal-head"><strong id="modalTitle">Cod HTML</strong>&nbsp;— scrie cod HTML sau lipește un link (https://...) pentru a încărca un site</div>
+
       <textarea id="codeArea" spellcheck="false" autocapitalize="off" autocorrect="off"></textarea>
       <div class="modal-foot">
         <button class="btn" id="btnCancelCode">Anulează</button>
@@ -383,10 +452,12 @@
   }
 
   function setSyncStatus(text, cls){
-    var el = document.getElementById("syncStatus");
-    el.textContent = text;
-    el.className = "sync-badge" + (cls ? " " + cls : "");
+    var dot = document.getElementById("syncDot");
+    var label = document.getElementById("syncText");
+    label.textContent = text;
+    dot.className = "sync-dot" + (cls ? " " + cls : "");
   }
+
 
   var guideV = document.getElementById("guideV");
   var guideH = document.getElementById("guideH");
@@ -495,8 +566,10 @@
       w: 320, h: 220,
       z: state.nextZ,
       html: DEFAULT_HTML,
+      url: null,
       label: "#" + idx
     };
+
   }
 
   function addFrameEl(data){
@@ -530,7 +603,8 @@
     frameEls[data.id] = { el: el, data: data };
 
     var iframe = el.querySelector("iframe");
-    iframe.srcdoc = data.html;
+    applyFrameSource(iframe, data);
+
 
     var moveGrip = el.querySelector(".move-grip");
     attachMove(moveGrip, data, el);
@@ -560,12 +634,14 @@
     var entry = frameEls[id];
     if(!entry) return;
     var iframe = entry.el.querySelector("iframe");
+    var data = entry.data;
     iframe.srcdoc = "about:blank";
     requestAnimationFrame(function(){
-      iframe.srcdoc = entry.data.html;
+      applyFrameSource(iframe, data);
     });
     showToast("Iframe reîncărcat");
   }
+
 
   function attachMove(handle, data, el){
     var startX, startY, startLeft, startTop, dragging = false;
@@ -743,7 +819,8 @@
     if(!entry) return;
     activeCodeFrameId = id;
     document.getElementById("modalTitle").textContent = "Cod HTML — " + entry.data.label;
-    document.getElementById("codeArea").value = entry.data.html;
+    document.getElementById("codeArea").value = entry.data.url ? entry.data.url : entry.data.html;
+
     document.getElementById("modalOverlay").classList.add("open");
   }
 
@@ -752,17 +829,41 @@
     activeCodeFrameId = null;
   }
 
+  function looksLikeUrl(str){
+    var t = str.trim();
+    if(!t || t.indexOf("\n") !== -1) return false;
+    return /^https?:\/\/\S+$/i.test(t);
+  }
+
+  function applyFrameSource(iframe, data){
+    if(data.url){
+      iframe.removeAttribute("srcdoc");
+      iframe.setAttribute("sandbox", "allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-popups-to-escape-sandbox allow-presentation");
+      iframe.src = data.url;
+    } else {
+      iframe.removeAttribute("src");
+      iframe.setAttribute("sandbox", "allow-scripts allow-forms allow-popups allow-modals allow-popups-to-escape-sandbox");
+      iframe.srcdoc = data.html || "";
+    }
+  }
+
   function saveCodeEditor(){
     if(!activeCodeFrameId) return;
     var entry = frameEls[activeCodeFrameId];
     if(!entry) return;
-    var newHtml = document.getElementById("codeArea").value;
-    entry.data.html = newHtml;
-    entry.el.querySelector("iframe").srcdoc = newHtml;
+    var raw = document.getElementById("codeArea").value;
+    if(looksLikeUrl(raw)){
+      entry.data.url = raw.trim();
+    } else {
+      entry.data.url = null;
+      entry.data.html = raw;
+    }
+    applyFrameSource(entry.el.querySelector("iframe"), entry.data);
     scheduleSave();
     closeCodeEditor();
     showToast("Cod salvat");
   }
+
 
   function setMode(mode){
     body.classList.toggle("mode-edit", mode === "edit");
@@ -772,9 +873,10 @@
     Object.keys(frameEls).forEach(function(id){
       var iframe = frameEls[id].el.querySelector("iframe");
       if(mode === "view"){
-        iframe.srcdoc = frameEls[id].data.html;
+        applyFrameSource(iframe, frameEls[id].data);
       }
     });
+
   }
 
   function applyProfile(id, name, newState){
