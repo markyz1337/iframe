@@ -113,6 +113,9 @@
     border-color:var(--edit);
   }
 
+.frame.selected{ border-color:var(--edit); box-shadow:0 0 0 2px rgba(245,166,35,.25); }
+
+
   .frame-body{
     position:absolute; inset:0;
     border-radius:5px; overflow:hidden;
@@ -130,7 +133,8 @@
     font-family:'JetBrains Mono',monospace; font-size:11px;
     pointer-events:auto;
   }
-  body.mode-edit .frame-toolbar{ display:flex; }
+body.mode-edit .frame.selected .frame-toolbar{ display:flex; }
+
   .frame-title{
     color:var(--edit); font-weight:700; margin-right:auto;
     background:var(--panel); border:1px solid var(--border);
@@ -162,18 +166,21 @@
     touch-action:none;
     box-shadow:0 2px 6px rgba(0,0,0,.4);
   }
-  body.mode-edit .move-grip{ display:flex; }
+body.mode-edit .frame.selected .move-grip{ display:flex; }
+
   .move-grip:active{ cursor:grabbing; }
 
   .edge{ position:absolute; z-index:3; display:none; touch-action:none; }
-  body.mode-edit .edge{ display:block; }
+body.mode-edit .frame.selected .edge{ display:block; }
+
   .edge-n{ top:-6px; left:10px; right:10px; height:12px; cursor:ns-resize; }
   .edge-s{ bottom:-6px; left:10px; right:10px; height:12px; cursor:ns-resize; }
   .edge-w{ left:-6px; top:10px; bottom:10px; width:12px; cursor:ew-resize; }
   .edge-e{ right:-6px; top:10px; bottom:10px; width:12px; cursor:ew-resize; }
 
   .corner{ position:absolute; width:18px; height:18px; z-index:4; display:none; touch-action:none; }
-  body.mode-edit .corner{ display:block; }
+body.mode-edit .frame.selected .corner{ display:block; }
+
   .corner::after{
     content:''; position:absolute; inset:4px; background:var(--edit);
     border-radius:3px; border:2px solid #0e1013;
@@ -301,6 +308,35 @@
     .profile-select{ height:30px; max-width:96px; font-size:11px; }
     .sync-badge{ height:30px; padding:0 8px; }
   }
+
+
+.frame{ transform-origin:center center; }
+.rotate-stem{
+  position:absolute; top:-70px; left:50%; width:2px; height:70px;
+  background:var(--view); transform:translateX(-50%);
+  display:none; pointer-events:none; z-index:2;
+}
+body.mode-edit .frame.selected .rotate-stem{ display:block; }
+
+.rotate-handle{
+  position:absolute; top:-83px; left:50%; transform:translateX(-50%);
+  width:26px; height:26px; border-radius:50%;
+  background:var(--view); border:2px solid #0e1013;
+  display:none; cursor:grab; touch-action:none; z-index:6;
+  box-shadow:0 2px 6px rgba(0,0,0,.4);
+}
+body.mode-edit .frame.selected .rotate-handle{ display:block; }
+
+.rotate-handle:active{ cursor:grabbing; }
+
+.frame.selected.flip-below .frame-toolbar{ top:auto; bottom:-38px; }
+.frame.selected.flip-below .rotate-stem{ top:auto; bottom:-70px; }
+.frame.selected.flip-below .rotate-handle{ top:auto; bottom:-83px; }
+.frame.selected.flip-below .move-grip{ top:auto; bottom:-16px; }
+
+
+
+
 
 </style>
 
@@ -590,14 +626,16 @@ function applyRemoteState(newState){
     if(el.dataset.locked) return; // se editează local chiar acum, nu suprascrie
 
     var data = entry.data;
-    var changedPos = (data.x !== nf.x || data.y !== nf.y || data.w !== nf.w || data.h !== nf.h);
+    var changedPos = (data.x !== nf.x || data.y !== nf.y || data.w !== nf.w || data.h !== nf.h || data.rot !== nf.rot);
     if(changedPos){
-      data.x = nf.x; data.y = nf.y; data.w = nf.w; data.h = nf.h;
+      data.x = nf.x; data.y = nf.y; data.w = nf.w; data.h = nf.h; data.rot = nf.rot;
       el.style.left = data.x + "px";
       el.style.top = data.y + "px";
       el.style.width = data.w + "px";
       el.style.height = data.h + "px";
+      el.style.transform = "rotate(" + (data.rot || 0) + "deg)";
     }
+
 
     if(data.z !== nf.z){
       data.z = nf.z;
@@ -765,6 +803,7 @@ function attachMove(handle, data, el){
     el.classList.remove("dragging");
     hideGuides();
     try{ handle.releasePointerCapture(ev.pointerId); }catch(e){}
+    updateFrameFlip(el);
     scheduleSave();
   }
 
@@ -773,6 +812,7 @@ function attachMove(handle, data, el){
   }
 
   function attachResize(handle, data, el){
+
 
     var dir = handle.getAttribute("data-dir");
     var startX, startY, startW, startH, startLeft, startTop, dragging = false;
@@ -967,8 +1007,9 @@ function attachMove(handle, data, el){
         applyFrameSource(iframe, frameEls[id].data);
       }
     });
-
+    if(mode === "view"){ deselectAll(); }
   }
+
 
 function applyProfile(id, name, newState){
   currentProfileId = id;
@@ -1152,6 +1193,17 @@ function applyProfile(id, name, newState){
   });
    document.getElementById("btnZoomIn").addEventListener("click", function(){ setZoom(zoom + 0.1); });
   document.getElementById("btnZoomOut").addEventListener("click", function(){ setZoom(zoom - 0.1); });
+  canvasWrap.addEventListener("pointerdown", function(ev){
+    if(ev.target === canvasWrap || ev.target === canvas || ev.target === zoomLayer){
+      deselectAll();
+    }
+  });
+  canvasWrap.addEventListener("scroll", function(){
+    var selEl = canvas.querySelector(".frame.selected");
+    if(selEl) updateFrameFlip(selEl);
+  });
+
+
   document.getElementById("zoomLabel").addEventListener("click", function(){ setZoom(1); });
 
   var UI_HIDDEN_KEY = "iframe_canvas_ui_hidden";
@@ -1172,6 +1224,191 @@ function applyProfile(id, name, newState){
     try{ stored = localStorage.getItem(UI_HIDDEN_KEY); }catch(e){}
     setUIHidden(stored === null ? true : stored === "1");
   })();
+
+
+
+function createFrameData(){
+  var wrapRect = canvasWrap.getBoundingClientRect();
+  var scrollX = canvasWrap.scrollLeft;
+  var scrollY = canvasWrap.scrollTop;
+  var x = Math.round((scrollX + wrapRect.width / 2) / zoom - 160 + (Math.random() * 40 - 20));
+  var y = Math.round((scrollY + 60) / zoom + (Math.random() * 40 - 20));
+  var idx = state.nextIndex++;
+  state.nextZ += 1;
+  return {
+    id: uid(),
+    x: Math.max(10, x), y: Math.max(10, y),
+    w: 320, h: 220,
+    z: state.nextZ,
+    html: DEFAULT_HTML,
+    url: null,
+    label: "#" + idx,
+    rot: 0
+  };
+}
+
+
+function addFrameEl(data){
+  var el = document.createElement("div");
+  el.className = "frame";
+  el.style.left = data.x + "px";
+  el.style.top = data.y + "px";
+  el.style.width = data.w + "px";
+  el.style.height = data.h + "px";
+  el.style.zIndex = data.z || 1;
+  el.style.transform = "rotate(" + (data.rot || 0) + "deg)";
+
+  el.innerHTML =
+    '<div class="frame-toolbar">' +
+      '<span class="frame-title">' + data.label + '</span>' +
+      '<button class="btn-refresh" type="button" title="Reincarca">R</button>' +
+      '<button class="btn-code" type="button">&lt;/&gt; Cod</button>' +
+      '<button class="del btn-del" type="button">X</button>' +
+    '</div>' +
+    '<div class="rotate-stem"></div>' +
+    '<div class="rotate-handle" title="Roteste"></div>' +
+    '<div class="move-grip" title="Trage pentru a muta">+</div>' +
+    '<div class="frame-body"><iframe sandbox="allow-scripts allow-forms allow-popups allow-modals allow-popups-to-escape-sandbox"></iframe></div>' +
+    '<div class="edge edge-n" data-dir="n"></div>' +
+    '<div class="edge edge-s" data-dir="s"></div>' +
+    '<div class="edge edge-w" data-dir="w"></div>' +
+    '<div class="edge edge-e" data-dir="e"></div>' +
+    '<div class="corner corner-nw" data-dir="nw"></div>' +
+    '<div class="corner corner-ne" data-dir="ne"></div>' +
+    '<div class="corner corner-sw" data-dir="sw"></div>' +
+    '<div class="corner corner-se" data-dir="se"></div>';
+
+  canvas.appendChild(el);
+  frameEls[data.id] = { el: el, data: data };
+
+  var iframe = el.querySelector("iframe");
+  applyFrameSource(iframe, data);
+
+  var moveGrip = el.querySelector(".move-grip");
+  attachMove(moveGrip, data, el);
+
+  var rotateHandle = el.querySelector(".rotate-handle");
+  attachRotate(rotateHandle, data, el);
+
+  el.querySelectorAll(".edge, .corner").forEach(function(handle){
+    attachResize(handle, data, el);
+  });
+
+  el.querySelector(".btn-code").addEventListener("click", function(){
+    openCodeEditor(data.id);
+  });
+  el.querySelector(".btn-refresh").addEventListener("click", function(){
+    refreshFrame(data.id);
+  });
+  el.querySelector(".btn-del").addEventListener("click", function(){
+    deleteFrame(data.id);
+  });
+
+  el.addEventListener("pointerdown", function(){
+    bringToFront(data, el);
+    selectFrame(data.id);
+  }, {capture:true});
+
+  updateEmptyHint();
+}
+
+function selectFrame(id){
+  Object.keys(frameEls).forEach(function(fid){
+    frameEls[fid].el.classList.toggle("selected", fid === id);
+  });
+  updateFrameFlip(frameEls[id].el);
+}
+
+function updateFrameFlip(el){
+  var wrapRect = canvasWrap.getBoundingClientRect();
+  var handle = el.querySelector(".rotate-handle");
+  if(!handle) return;
+
+  // verificăm mânerul de rotire, fiindcă e cel mai îndepărtat element (-83px),
+  // deci primul care ar ieși sub bara de instrumente
+  el.classList.remove("flip-below");
+  var rectTop = handle.getBoundingClientRect();
+
+  el.classList.add("flip-below");
+  var rectBottom = handle.getBoundingClientRect();
+
+  var topOK = rectTop.top >= wrapRect.top;
+  var bottomOK = rectBottom.bottom <= (wrapRect.top + wrapRect.height);
+
+  var useBelow;
+  if(topOK){
+    useBelow = false; // varianta implicită (sus) e deja complet vizibilă
+  } else if(bottomOK){
+    useBelow = true; // sus iese pe sub topbar, jos încape
+  } else {
+    useBelow = rectBottom.top > rectTop.top; // ambele ies parțial, alegem varianta mai puțin rea
+  }
+
+  el.classList.toggle("flip-below", useBelow);
+}
+
+
+
+
+function deselectAll(){
+  Object.keys(frameEls).forEach(function(fid){
+    frameEls[fid].el.classList.remove("selected");
+  });
+}
+
+function attachRotate(handle, data, el){
+  var centerX, centerY, startAngle = 0, startRot = 0, dragging = false;
+  var snapTargets = [0, 45, 90, 135, 180, 225, 270, 315, 360];
+
+  function angleFromCenter(px, py){
+    var dx = px - centerX;
+    var dy = py - centerY;
+    return Math.atan2(dy, dx) * 180 / Math.PI + 90;
+  }
+
+  handle.addEventListener("pointerdown", function(ev){
+    if(body.classList.contains("mode-view")) return;
+    ev.preventDefault();
+    ev.stopPropagation();
+    dragging = true;
+    el.dataset.locked = "1";
+    var rect = el.getBoundingClientRect();
+    centerX = rect.left + rect.width / 2;
+    centerY = rect.top + rect.height / 2;
+    startAngle = angleFromCenter(ev.clientX, ev.clientY);
+    startRot = data.rot || 0;
+    handle.setPointerCapture(ev.pointerId);
+    bringToFront(data, el);
+  });
+
+  handle.addEventListener("pointermove", function(ev){
+    if(!dragging) return;
+    var currentAngle = angleFromCenter(ev.clientX, ev.clientY);
+    var newRot = startRot + (currentAngle - startAngle);
+    newRot = ((newRot % 360) + 360) % 360;
+    for(var i = 0; i < snapTargets.length; i++){
+      var t = snapTargets[i] % 360;
+      var diff = Math.abs(newRot - t);
+      if(diff > 180) diff = 360 - diff;
+      if(diff <= 4){ newRot = t; break; }
+    }
+    data.rot = newRot;
+    el.style.transform = "rotate(" + newRot + "deg)";
+  });
+
+  function endDrag(ev){
+    if(!dragging) return;
+    dragging = false;
+    delete el.dataset.locked;
+    try{ handle.releasePointerCapture(ev.pointerId); }catch(e){}
+    updateFrameFlip(el);
+    scheduleSave();
+  }
+
+  handle.addEventListener("pointerup", endDrag);
+  handle.addEventListener("pointercancel", endDrag);
+}
+
 
 
 
