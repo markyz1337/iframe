@@ -86,12 +86,15 @@
   .canvas-wrap{
     position:absolute; top:56px; left:0; right:0; bottom:0;
     overflow:auto;
-    background-image:
-      linear-gradient(var(--grid) 1px, transparent 1px),
-      linear-gradient(90deg, var(--grid) 1px, transparent 1px);
     background-size:32px 32px;
     background-color:var(--bg);
   }
+  body.mode-edit .canvas-wrap{
+    background-image:
+      linear-gradient(var(--grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  }
+
   .canvas{
     position:relative;
     width:2600px; height:2600px;
@@ -288,6 +291,17 @@ body.mode-edit .frame.selected .corner{ display:block; }
   .sync-dot.err{ background:var(--danger); }
   @keyframes sync-pulse{ 0%,100%{ opacity:1; } 50%{ opacity:.3; } }
 
+  .color-pick{
+    -webkit-appearance:none; appearance:none;
+    width:34px; height:34px; padding:2px; flex:0 0 auto;
+    border:1px solid var(--border); border-radius:9px;
+    background:var(--panel-2); cursor:pointer;
+  }
+  .color-pick::-webkit-color-swatch-wrapper{ padding:0; }
+  .color-pick::-webkit-color-swatch{ border:none; border-radius:6px; }
+  .color-pick::-moz-color-swatch{ border:none; border-radius:6px; }
+
+
   body.ui-hidden .topbar{ display:none; }
 
   .show-ui-btn{
@@ -349,7 +363,9 @@ body.mode-edit .frame.selected .rotate-handle{ display:block; }
   <div class="topbar">
     <div class="tb-group">
       <select class="profile-select" id="profileSelect" title="Profil"></select>
+      <input type="color" id="bgColorPicker" class="color-pick" title="Culoare fundal" value="#0e1013">
       <button class="icon-btn" id="btnNewProfile" title="Profil nou">
+
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
       </button>
       <button class="icon-btn" id="btnRenameProfile" title="Redenumește profilul">
@@ -609,6 +625,11 @@ function subscribeRealtime(id){
 function applyRemoteState(newState){
   if(!newState || !Array.isArray(newState.frames)) return;
   state.nextZ = Math.max(state.nextZ || 1, newState.nextZ || 1);
+  if(newState.bg !== state.bg){
+    state.bg = newState.bg;
+    applyBg(state.bg);
+  }
+
   state.nextIndex = Math.max(state.nextIndex || 1, newState.nextIndex || 1);
 
   var newIds = {};
@@ -1011,12 +1032,20 @@ function attachMove(handle, data, el){
   }
 
 
+function applyBg(color){
+  var c = color || "#0e1013";
+  canvasWrap.style.backgroundColor = c;
+  var picker = document.getElementById("bgColorPicker");
+  if(picker) picker.value = c;
+}
+
 function applyProfile(id, name, newState){
   currentProfileId = id;
   currentProfileName = name;
   state = (newState && Array.isArray(newState.frames)) ? newState : { frames: [], nextZ: 1, nextIndex: 1 };
   if(typeof state.nextZ !== "number") state.nextZ = 1;
   if(typeof state.nextIndex !== "number") state.nextIndex = 1;
+  applyBg(state.bg);
   Object.keys(frameEls).forEach(function(fid){ frameEls[fid].el.remove(); });
   frameEls = {};
   state.frames.forEach(addFrameEl);
@@ -1031,6 +1060,7 @@ function applyProfile(id, name, newState){
   applyZoom();
   subscribeRealtime(id);
 }
+
 
 
   function refreshProfileSelect(list, selectedId){
@@ -1205,6 +1235,13 @@ function applyProfile(id, name, newState){
 
 
   document.getElementById("zoomLabel").addEventListener("click", function(){ setZoom(1); });
+
+  document.getElementById("bgColorPicker").addEventListener("input", function(){
+    state.bg = this.value;
+    applyBg(state.bg);
+    scheduleSave();
+  });
+
 
   var UI_HIDDEN_KEY = "iframe_canvas_ui_hidden";
   function setUIHidden(hidden){
