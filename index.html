@@ -1093,6 +1093,13 @@ function applyProfile(id, name, newState){
   function refreshProfileSelect(list, selectedId){
     var sel = document.getElementById("profileSelect");
     sel.innerHTML = "";
+    if(!selectedId){
+      var ph = document.createElement("option");
+      ph.value = "";
+      ph.textContent = "— Alege profil —";
+      ph.selected = true;
+      sel.appendChild(ph);
+    }
     list.forEach(function(p){
       var opt = document.createElement("option");
       opt.value = p.id;
@@ -1220,6 +1227,7 @@ function applyProfile(id, name, newState){
   }
 
   document.getElementById("btnAdd").addEventListener("click", function(){
+    if(!currentProfileId){ showToast("Alege mai întâi un profil"); return; }
     var data = createFrameData();
     state.frames.push(data);
     addFrameEl(data);
@@ -1249,7 +1257,16 @@ function applyProfile(id, name, newState){
   document.getElementById("btnRenameProfile").addEventListener("click", renameProfile);
   document.getElementById("btnDeleteProfile").addEventListener("click", deleteProfileHandler);
   document.getElementById("profileSelect").addEventListener("change", function(){
-    loadProfile(this.value);
+    var sel = this;
+    var wanted = sel.value;
+    if(!wanted) return;
+    var pass = prompt("Parola pentru schimbarea profilului:");
+    if(pass !== "dean"){
+      if(pass !== null) showToast("Parolă greșită");
+      sel.value = currentProfileId || "";
+      return;
+    }
+    loadProfile(wanted);
   });
    document.getElementById("btnZoomIn").addEventListener("click", function(){ setZoom(zoom + 0.1); });
   document.getElementById("btnZoomOut").addEventListener("click", function(){ setZoom(zoom - 0.1); });
@@ -1554,8 +1571,13 @@ function attachRotate(handle, data, el){
         refreshProfileSelect(list, null);
         var lastId = null;
         try{ lastId = localStorage.getItem(DEVICE_PROFILE_KEY); }catch(e){}
-        var target = list.filter(function(p){ return p.id === lastId; })[0] || list[0];
-        document.getElementById("profileSelect").value = target.id;
+        var target = list.filter(function(p){ return p.id === lastId; })[0];
+        if(!target){
+          refreshProfileSelect(list, null);
+          setSyncStatus("Alege un profil", "");
+          return;
+        }
+        refreshProfileSelect(list, target.id);
         return loadProfile(target.id);
       })
       .catch(function(err){
