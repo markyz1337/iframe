@@ -580,7 +580,7 @@ var lastPushedStateJSON = null;
   }
 
   function setZoom(z){
-    zoom = Math.min(2, Math.max(0.25, z));
+    zoom = Math.min(4, Math.max(0.1, z));
     applyZoom();
     if(currentProfileId){
       try{ localStorage.setItem(ZOOM_PREFIX + currentProfileId, String(zoom)); }catch(e){}
@@ -1053,6 +1053,15 @@ function applyBg(color){
 function applyProfile(id, name, newState){
   currentProfileId = id;
   currentProfileName = name;
+  document.title = name;
+  var appleTitle = document.querySelector('meta[name="apple-mobile-web-app-title"]');
+  if(!appleTitle){
+    appleTitle = document.createElement("meta");
+    appleTitle.name = "apple-mobile-web-app-title";
+    document.head.appendChild(appleTitle);
+  }
+  appleTitle.content = name;
+
   state = (newState && Array.isArray(newState.frames)) ? newState : { frames: [], nextZ: 1, nextIndex: 1 };
   if(typeof state.nextZ !== "number") state.nextZ = 1;
   if(typeof state.nextIndex !== "number") state.nextIndex = 1;
@@ -1167,6 +1176,9 @@ function applyProfile(id, name, newState){
         var sel = document.getElementById("profileSelect");
         var opt = sel.querySelector('option[value="' + currentProfileId + '"]');
         if(opt) opt.textContent = name;
+        document.title = name;
+        var at = document.querySelector('meta[name="apple-mobile-web-app-title"]');
+        if(at) at.content = name;
         showToast("Profil redenumit");
       });
   }
@@ -1245,7 +1257,18 @@ function applyProfile(id, name, newState){
   });
 
 
-  document.getElementById("zoomLabel").addEventListener("click", function(){ setZoom(1); });
+  document.getElementById("zoomLabel").addEventListener("click", function(){
+    var current = Math.round(zoom * 100);
+    var raw = prompt("Zoom precis (10 - 400 %):", current);
+    if(raw === null) return;
+    var val = parseFloat(String(raw).replace("%", "").replace(",", ".").trim());
+    if(isNaN(val)){
+      showToast("Valoare invalidă");
+      return;
+    }
+    setZoom(val / 100);
+  });
+
 
   document.getElementById("bgColorPicker").addEventListener("input", function(){
     state.bg = this.value;
