@@ -300,6 +300,9 @@ body.mode-edit .frame.selected .corner{ display:block; }
     border:1px solid var(--border); border-radius:9px;
     background:var(--panel-2); cursor:pointer;
   }
+  .color-wrap{ display:flex; flex:0 0 auto; cursor:pointer; }
+  .color-wrap .color-pick{ pointer-events:none; }
+  .color-wrap.unlocked .color-pick{ pointer-events:auto; outline:2px solid var(--edit); }
   .color-pick::-webkit-color-swatch-wrapper{ padding:0; }
   .color-pick::-webkit-color-swatch{ border:none; border-radius:6px; }
   .color-pick::-moz-color-swatch{ border:none; border-radius:6px; }
@@ -385,7 +388,7 @@ body.mode-edit .frame.selected .rotate-handle{ display:block; }
   <div class="topbar">
     <div class="tb-group">
       <select class="profile-select" id="profileSelect" title="Profil"></select>
-      <input type="color" id="bgColorPicker" class="color-pick" title="Culoare fundal" value="#0e1013">
+      <span id="bgColorWrap" class="color-wrap"><input type="color" id="bgColorPicker" class="color-pick" title="Culoare fundal" value="#0e1013"></span>
       <button class="icon-btn" id="btnNewProfile" title="Profil nou">
 
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
@@ -1195,6 +1198,7 @@ function applyProfile(id, name, newState){
 
   function renameProfile(){
     if(!currentProfileId) return;
+    if(!askPass()) return;
     var name = prompt("Nume nou pentru profil:", currentProfileName);
     if(name === null) return;
     name = name.trim();
@@ -1318,9 +1322,26 @@ function applyProfile(id, name, newState){
   });
 
 
-  document.getElementById("bgColorPicker").addEventListener("click", function(ev){
-    if(!askPass()) ev.preventDefault();
-  });
+  (function(){
+    var wrap = document.getElementById("bgColorWrap");
+    var picker = document.getElementById("bgColorPicker");
+    var relockTimer = null;
+    function relock(){
+      wrap.classList.remove("unlocked");
+      clearTimeout(relockTimer);
+    }
+    wrap.addEventListener("click", function(){
+      if(wrap.classList.contains("unlocked")) return;
+      if(!askPass()) return;
+      wrap.classList.add("unlocked");
+      showToast("Deblocat. Atinge din nou culoarea");
+      clearTimeout(relockTimer);
+      relockTimer = setTimeout(relock, 10000);
+    });
+    picker.addEventListener("change", relock);
+    picker.addEventListener("blur", function(){ setTimeout(relock, 300); });
+  })();
+
 
   document.getElementById("bgColorPicker").addEventListener("input", function(){
     state.bg = this.value;
@@ -1359,7 +1380,9 @@ function applyProfile(id, name, newState){
 
   document.getElementById("btnProfileImage").addEventListener("click", function(){
     if(!currentProfileId) return;
+    if(!askPass()) return;
     var raw = prompt("Link direct la imagine (lasă gol ca să o ștergi):", state.icon || "");
+
     if(raw === null) return;
     var val = raw.trim();
     if(val && !/^https?:\/\/\S+$/i.test(val)){
