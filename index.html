@@ -318,11 +318,24 @@ body.mode-edit .frame.selected .corner{ display:block; }
     width:44px; height:44px; border-radius:50%;
     background:var(--panel-2); border:1px solid var(--border); color:var(--text);
     display:none; align-items:center; justify-content:center;
-    cursor:pointer; opacity:.55;
+    cursor:pointer; opacity:0;
+
   }
   .show-ui-btn svg{ width:18px; height:18px; }
   .show-ui-btn:active{ opacity:1; }
-  body.ui-hidden .show-ui-btn{ display:flex; }
+  body.ui-hidden .show-ui-btn{
+    display:flex;
+    opacity:0;
+    pointer-events:none;
+    transition:opacity .6s ease;
+  }
+  body.ui-hidden.fab-visible .show-ui-btn{
+    opacity:.55;
+    pointer-events:auto;
+  }
+  body.ui-hidden.fab-visible .show-ui-btn:active{ opacity:1; }
+
+
 
   @media(max-width:420px){
     .icon-btn, .mode-toggle button{ width:30px; height:30px; }
@@ -1348,7 +1361,17 @@ function applyProfile(id, name, newState){
   function setUIHidden(hidden){
     body.classList.toggle("ui-hidden", hidden);
     try{ localStorage.setItem(UI_HIDDEN_KEY, hidden ? "1" : "0"); }catch(e){}
+    clearTimeout(setUIHidden._t);
+    if(hidden){
+      body.classList.add("fab-visible");
+      setUIHidden._t = setTimeout(function(){
+        body.classList.remove("fab-visible");
+      }, 2000);
+    } else {
+      body.classList.remove("fab-visible");
+    }
   }
+
   document.getElementById("btnHideUI").addEventListener("click", function(){
     setUIHidden(true);
     setMode("view");
