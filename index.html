@@ -536,6 +536,13 @@ var lastPushedStateJSON = null;
     showToast._t = setTimeout(function(){ toastEl.classList.remove("show"); }, 1800);
   }
 
+  function askPass(){
+    var pass = prompt("Parola:");
+    if(pass === "dean") return true;
+    if(pass !== null) showToast("Parolă greșită");
+    return false;
+  }
+
   function setSyncStatus(text, cls){
     var dot = document.getElementById("syncDot");
     var label = document.getElementById("syncText");
@@ -988,6 +995,7 @@ function attachMove(handle, data, el){
   function deleteFrame(id){
     var entry = frameEls[id];
     if(!entry) return;
+    if(!askPass()) return;
     if(!confirm("Ștergi acest iframe?")) return;
     entry.el.remove();
     delete frameEls[id];
@@ -1161,6 +1169,7 @@ function applyProfile(id, name, newState){
   }
 
   function createProfile(){
+    if(!askPass()) return;
     var name = prompt("Numele noului profil:", "Profil nou");
     if(name === null) return;
     name = name.trim() || "Profil nou";
@@ -1211,6 +1220,7 @@ function applyProfile(id, name, newState){
   }
 
   function deleteProfileHandler(){
+    if(!askPass()) return;
     if(!currentProfileId) return;
     var sel = document.getElementById("profileSelect");
     if(sel.options.length <= 1){
@@ -1249,6 +1259,7 @@ function applyProfile(id, name, newState){
 
   document.getElementById("btnClear").addEventListener("click", function(){
     if(!state.frames.length) return;
+    if(!askPass()) return;
     if(!confirm("Ștergi toate iframe-urile din acest profil? Nu se poate anula.")) return;
     state.frames = [];
     Object.keys(frameEls).forEach(function(id){ frameEls[id].el.remove(); });
@@ -1306,6 +1317,10 @@ function applyProfile(id, name, newState){
     setZoom(val / 100);
   });
 
+
+  document.getElementById("bgColorPicker").addEventListener("click", function(ev){
+    if(!askPass()) ev.preventDefault();
+  });
 
   document.getElementById("bgColorPicker").addEventListener("input", function(){
     state.bg = this.value;
