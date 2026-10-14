@@ -1725,8 +1725,20 @@ function attachRotate(handle, data, el){
       });
   }
 
+  // Blochează complet tastatura (scanner barcode) în afara editorului de cod
+  ["keydown", "keypress", "keyup"].forEach(function(evName){
+    document.addEventListener(evName, function(ev){
+      var t = ev.target;
+      if(t && t.tagName === "TEXTAREA") return;
+      if(ev.ctrlKey || ev.metaKey || ev.altKey) return;
+      ev.preventDefault();
+      ev.stopPropagation();
+    }, true);
+  });
+
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(function(){});
   init();
+
 })();
 </script>
 
