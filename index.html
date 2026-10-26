@@ -529,6 +529,20 @@ body.mode-edit .frame.selected .rotate-handle{ display:block; }
 var realtimeChannel = null;
 var lastPushedStateJSON = null;
 
+var lastPushedAt = null;
+var CACHE2 = "iframe_canvas_c2_";
+
+function readCache(id){
+  try{ var r = localStorage.getItem(CACHE2 + id); return r ? JSON.parse(r) : null; }catch(e){ return null; }
+}
+function writeCache(id, name, updated_at, st){
+  try{ localStorage.setItem(CACHE2 + id, JSON.stringify({ name: name, updated_at: updated_at, state: st })); }catch(e){}
+}
+function sameTs(a, b){
+  if(!a || !b) return false;
+  return new Date(a).getTime() === new Date(b).getTime();
+}
+
 
   var DEFAULT_HTML =
 "<!-- Scrie aici codul tău HTML/CSS/JS -->\n" +
@@ -627,29 +641,42 @@ var lastPushedStateJSON = null;
 
   function scheduleSave(){
     if(!currentProfileId) return;
-    try{ localStorage.setItem(CACHE_PREFIX + currentProfileId, JSON.stringify(state)); }catch(e){}
     setSyncStatus("Se salvează...", "busy");
     clearTimeout(saveTimer);
     saveTimer = setTimeout(pushToSupabase, 600);
   }
 
+
 function pushToSupabase(){
   if(!currentProfileId) return;
   var payloadJSON = JSON.stringify(state);
+  if(payloadJSON === lastPushedStateJSON){
+    setSyncStatus("Salvat", "ok");
+    return;
+  }
+  var ts = new Date().toISOString();
+  var pid = currentProfileId;
   lastPushedStateJSON = payloadJSON;
+  lastPushedAt = ts;
   supabaseClient
     .from(TABLE)
-    .update({ state: state, updated_at: new Date().toISOString() })
-    .eq("id", currentProfileId)
+    .update({ state: state, updated_at: ts })
+    .eq("id", pid)
+    .select("updated_at")
     .then(function(res){
       if(res.error){
+        lastPushedStateJSON = null;
         setSyncStatus("Eroare sync", "err");
         showToast("Eroare la salvare online: " + res.error.message);
       } else {
+        var srv = (res.data && res.data[0] && res.data[0].updated_at) || ts;
+        lastPushedAt = srv;
+        writeCache(pid, currentProfileName, srv, state);
         setSyncStatus("Salvat", "ok");
       }
     });
 }
+
 
 
 function subscribeRealtime(id){
@@ -663,13 +690,17 @@ function subscribeRealtime(id){
       { event: "UPDATE", schema: "public", table: TABLE, filter: "id=eq." + id },
       function(payload){
         if(!payload.new) return;
+        if(sameTs(payload.new.updated_at, lastPushedAt)) return;
         var incomingJSON = JSON.stringify(payload.new.state);
         if(incomingJSON === lastPushedStateJSON) return;
         applyRemoteState(payload.new.state);
+        lastPushedStateJSON = JSON.stringify(state);
+        writeCache(id, currentProfileName, payload.new.updated_at, state);
       }
     )
     .subscribe();
 }
+
 
 function applyRemoteState(newState){
   if(!newState || !Array.isArray(newState.frames)) return;
@@ -737,6 +768,7 @@ function applyRemoteState(newState){
 }
 
   function bringToFront(data, el){
+    if(data.z === state.nextZ) return;
     state.nextZ += 1;
     data.z = state.nextZ;
     el.style.zIndex = data.z;
@@ -1072,12 +1104,6 @@ function attachMove(handle, data, el){
     body.classList.toggle("mode-view", mode === "view");
     document.getElementById("btnModeEdit").classList.toggle("active", mode === "edit");
     document.getElementById("btnModeView").classList.toggle("active", mode === "view");
-    Object.keys(frameEls).forEach(function(id){
-      var iframe = frameEls[id].el.querySelector("iframe");
-      if(mode === "view"){
-        applyFrameSource(iframe, frameEls[id].data);
-      }
-    });
     if(mode === "view"){ deselectAll(); }
   }
 
@@ -1118,6 +1144,7 @@ function applyProfile(id, name, newState){
   }catch(e){}
   zoom = isNaN(savedZoom) ? 1 : savedZoom;
   applyZoom();
+  lastPushedStateJSON = JSON.stringify(state);
   subscribeRealtime(id);
 }
 
@@ -1153,24 +1180,42 @@ function applyProfile(id, name, newState){
       });
   }
 
-  function loadProfile(id){
+    function loadProfile(id){
     setSyncStatus("Se încarcă...", "busy");
+    var cached = readCache(id);
+    if(cached && cached.state){
+      applyProfile(id, cached.name || currentProfileName || "Profil", cached.state);
+    }
     return supabaseClient
       .from(TABLE)
-      .select("id,name,state")
+      .select("id,name,updated_at")
       .eq("id", id)
       .single()
       .then(function(res){
         if(res.error) throw res.error;
-        applyProfile(res.data.id, res.data.name, res.data.state);
-        try{ localStorage.setItem(CACHE_PREFIX + id, JSON.stringify(res.data.state)); }catch(e){}
-        setSyncStatus("Salvat", "ok");
+        if(cached && cached.state && sameTs(cached.updated_at, res.data.updated_at)){
+          if(cached.name !== res.data.name){
+            currentProfileName = res.data.name;
+            document.title = res.data.name;
+            writeCache(id, res.data.name, res.data.updated_at, cached.state);
+          }
+          setSyncStatus("Salvat", "ok");
+          return;
+        }
+        return supabaseClient
+          .from(TABLE)
+          .select("id,name,state,updated_at")
+          .eq("id", id)
+          .single()
+          .then(function(r2){
+            if(r2.error) throw r2.error;
+            applyProfile(r2.data.id, r2.data.name, r2.data.state);
+            writeCache(id, r2.data.name, r2.data.updated_at, r2.data.state);
+            setSyncStatus("Salvat", "ok");
+          });
       })
       .catch(function(err){
-        var cached = null;
-        try{ cached = localStorage.getItem(CACHE_PREFIX + id); }catch(e){}
-        if(cached){
-          applyProfile(id, currentProfileName || "Profil", JSON.parse(cached));
+        if(cached && cached.state){
           setSyncStatus("Offline (cache local)", "err");
           showToast("Fără conexiune, folosesc datele salvate local");
         } else {
@@ -1179,6 +1224,7 @@ function applyProfile(id, name, newState){
         }
       });
   }
+
 
   function createProfile(){
     if(!askPass()) return;
@@ -1573,7 +1619,7 @@ function addFrameEl(data){
   });
 
   el.addEventListener("pointerdown", function(){
-    bringToFront(data, el);
+    if(body.classList.contains("mode-edit")) bringToFront(data, el);
     selectFrame(data.id);
   }, {capture:true});
 
@@ -1716,10 +1762,9 @@ function attachRotate(handle, data, el){
         var lastId = null;
         try{ lastId = localStorage.getItem(DEVICE_PROFILE_KEY); }catch(e){}
         if(lastId){
-          var cached = null;
-          try{ cached = localStorage.getItem(CACHE_PREFIX + lastId); }catch(e){}
-          if(cached){
-            applyProfile(lastId, "Profil (local)", JSON.parse(cached));
+          var c2 = readCache(lastId);
+          if(c2 && c2.state){
+            applyProfile(lastId, c2.name || "Profil (local)", c2.state);
           }
         }
       });
